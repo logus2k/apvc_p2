@@ -1,0 +1,11 @@
+# Chest X-Ray Images (Pneumonia) Dataset
+chest_xray/
+
+# Python VENV folders and files
+__pycache__/
+lib/
+bin/
+include/
+share/
+lib64
+pyvenv.cfg
