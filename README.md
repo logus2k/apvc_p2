@@ -20,23 +20,19 @@ This project applies **Transfer Learning** to classify chest X-ray images, build
 
 ### 1. Data Augmentation
 - Apply transformations (rotation, zoom, flip) to increase dataset diversity.
-- Script: `src/data_augmentation.py`
 
 ### 2. Transfer Learning (TL)
 - Use pre-trained models (e.g., VGG16, ResNet50, EfficientNet).
-- Script: `src/feature_extractor.py`
 
 ### 3. Feature Extraction
 - Extract features from pre-trained models and train a classifier on top.
 
 ### 4. Fine-Tuning
 - Unfreeze and retrain later layers of the pre-trained model.
-- Script: `src/fine_tuning.py`
 
 ## Results
+
 - Compare accuracy, precision, recall, and F1-score across experiments.
-- Visualize results using `matplotlib` or `seaborn`.
-- Save performance metrics in `results/`.
 
 ## Justification
 
