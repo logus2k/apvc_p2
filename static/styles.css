@@ -1,0 +1,238 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    padding: 10px;
+    min-height: 100vh;
+    --dot-bg: black;
+    --dot-color: #666666;
+    --dot-size: 0.5px;
+    --dot-space: 10px;
+    background:
+        linear-gradient(90deg, var(--dot-bg) calc(var(--dot-space) - var(--dot-size)), transparent 1%) center / var(--dot-space) var(--dot-space),
+        linear-gradient(var(--dot-bg) calc(var(--dot-space) - var(--dot-size)), transparent 1%) center / var(--dot-space) var(--dot-space),
+        var(--dot-color);
+}
+
+.container {
+    max-width: 1800px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: auto;
+    min-height: calc(100vh - 20px);
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: #417bb4;
+    color: white;
+    padding: 10px 20px;
+    flex-shrink: 0;
+}
+
+h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.controls {
+    padding: 10px 20px 0px 20px;
+    background: #ecf0f1;
+    border-bottom: 1px solid #bdc3c7;
+    flex-shrink: 0;
+}
+
+.control-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #34495e;
+    padding-left: 5px;
+}
+
+select,
+input[type="number"] {
+    padding: 8px 12px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-size: 14px;
+    min-width: 150px;
+}
+
+input[type="number"] {
+    min-width: 50px;
+    width: 120px;
+}
+
+button {
+    padding: 8px 16px;
+    background: #2980b9;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #3498db;
+}
+
+button:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+button.success {
+    background: #229954;
+}
+
+button.success:hover {
+    background: #39b26c;
+}
+
+button.warning {
+    background: #e67e22;
+}
+
+button.warning:hover {
+    background: #d35400;
+}
+
+.image-grid-container {
+    padding: 0px 5px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    max-height: 100%;
+}
+
+.image-cell {
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    max-height: 100%;
+    padding: 2px;
+    box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
+    background: #f8f9fa;
+}
+
+.image-cell .filename {
+    font-size: 10px;
+    font-weight: bold;
+    color: #696969;
+    padding: 2px 4px;
+    text-align: center;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.image-cell .image-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    overflow: hidden;
+}
+
+.image-cell img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.image-cell .placeholder {
+    color: #95a5a6;
+    font-size: 12px;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #7f8c8d;
+}
+
+.status {
+    padding: 10px 20px;
+    background: #d5f4e6;
+    border-left: 4px solid #27ae60;
+    margin: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    display: none;
+    flex-shrink: 0;
+}
+
+.status.error {
+    background: #fadbd8;
+    border-left-color: #e74c3c;
+}
+
+.info-box {
+    display: flex !important;
+    justify-content: space-between;
+    background: #c7e5ee;
+    padding: 10px;
+    margin: 5px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #2c3e50;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 15px;
+    flex-wrap: nowrap;
+}
+
+.pagination-controls button {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.pagination-controls span {
+    font-weight: 500;
+    color: #34495e;
+}
