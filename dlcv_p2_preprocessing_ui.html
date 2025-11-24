@@ -172,10 +172,10 @@
         </div>
 
         <div class="image-grid-container">
-            <div id="loading" class="loading" style="display:none;">Loading images...</div>
             <div class="image-grid" id="image-grid"></div>
         </div>
 
+        <div id="loading" class="loading" style="display:none;">Loading images...</div>
         <div class="status" id="status"></div>
 
     </div>
@@ -214,14 +214,34 @@
             console.log('totalImages set to:', totalImages);
             document.getElementById('info-box').style.display = 'block'; 
             document.getElementById('dimension-info').innerHTML = `Dataset: <b>${d.dataset.toUpperCase()}</b>&nbsp; | &nbsp;Dimension: <b>${d.dimension}</b>&nbsp; | &nbsp;Total: <b>${totalImages}</b> image(s)`; 
-            updatePaginationButtons(); 
+            updatePaginationButtons();
+            
+            // Set expected image count for this page
+            window.expectedImageCount = d.count;
+            window.receivedImageCount = 0;
         });
         socket.on('image_data', (d) => { 
             imageBuffers[d.index] = d.data;
             if (d.filename) {
                 imageFilenames[d.index] = d.filename;
             }
-            displayImage(d.index, d.data, d.filename); 
+            displayImage(d.index, d.data, d.filename);
+            
+            // Track received images and mark empty cells once all images are received
+            window.receivedImageCount++;
+            if (window.receivedImageCount === window.expectedImageCount) {
+                // Mark any remaining cells as empty
+                for (let i = window.expectedImageCount; i < 18; i++) {
+                    const cell = document.getElementById(`cell-${i}`);
+                    if (cell) {
+                        const placeholder = cell.querySelector('.placeholder');
+                        if (placeholder && placeholder.textContent === 'Loading...') {
+                            placeholder.textContent = 'Empty';
+                            placeholder.style.color = '#ccc';
+                        }
+                    }
+                }
+            }
         });
         socket.on('error', (d) => showStatus(`Error: ${d.message}`, true));
         
