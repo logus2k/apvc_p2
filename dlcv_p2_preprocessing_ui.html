@@ -31,7 +31,10 @@
         .control-group { display: flex; flex-direction: column; gap: 5px; }
         label { font-size: 13px; font-weight: 500; color: #34495e; }
         select, input[type="number"] { padding: 8px 12px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 14px; min-width: 150px; }
-        input[type="number"] { min-width: 100px; }
+        input[type="number"] {
+            min-width: 50px;
+            width: 120px;
+        }
         button { padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; }
         button:hover { background: #2980b9; }
         button:disabled { background: #95a5a6; cursor: not-allowed; opacity: 0.6; }
@@ -98,7 +101,7 @@
 <body>
     <div class="container">
 
-        <header><h1>Chest X-ray Preprocessing Configuration</h1></header>
+        <header><h1>Chest X-ray Preprocessing Configuration Analyzer</h1></header>
 
         <div class="controls">
 
@@ -172,7 +175,7 @@
             totalImages = d.total_available || d.count; 
             console.log('totalImages set to:', totalImages);
             document.getElementById('info-box').style.display = 'block'; 
-            document.getElementById('dimension-info').innerHTML = `Dimension: <b>${d.dimension}</b> | Dataset: <b>${d.dataset.toUpperCase()}</b> | Total: <b>${totalImages}</b>`; 
+            document.getElementById('dimension-info').innerHTML = `Dataset: <b>${d.dataset.toUpperCase()}</b>&nbsp; | &nbsp;Dimension: <b>${d.dimension}</b>&nbsp; | &nbsp;Total: <b>${totalImages}</b> image(s)`; 
             updatePaginationButtons(); 
         });
         socket.on('image_data', (d) => { 
@@ -391,7 +394,7 @@
         function getCurrentParams() { return { h_crop: parseFloat(document.getElementById('h_crop').value) || 0, v_crop: parseFloat(document.getElementById('v_crop').value) || 0, clahe: parseFloat(document.getElementById('clahe').value) || 0, zoom_in: parseFloat(document.getElementById('zoom_in').value) || 0 }; }
         function updatePreview() { if (!currentDimension) { showStatus('Load images first', true); return; } loadImagesPage(); }
         function displayImage(i, d, filename) {
-            console.log('displayImage called: index=', i, 'filename=', filename);
+            // console.log('displayImage called: index=', i, 'filename=', filename);
             const c = document.getElementById(`cell-${i}`); 
             if (!c) {
                 console.log('Cell not found:', `cell-${i}`);
@@ -403,11 +406,11 @@
             const filenameDiv = c.querySelector('.filename');
             const imageWrapper = c.querySelector('.image-wrapper');
             
-            console.log('filenameDiv found:', !!filenameDiv, 'imageWrapper found:', !!imageWrapper);
+            // console.log('filenameDiv found:', !!filenameDiv, 'imageWrapper found:', !!imageWrapper);
             
             if (filenameDiv && filename) {
                 filenameDiv.textContent = filename;
-                console.log('Set filename to:', filename);
+                // console.log('Set filename to:', filename);
             } else {
                 console.log('Skipped setting filename - filenameDiv:', !!filenameDiv, 'filename:', filename);
             }
