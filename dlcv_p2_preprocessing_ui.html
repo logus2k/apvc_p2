@@ -7,7 +7,19 @@
     <script src="/cxray/static/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #f5f5f5; padding: 10px; min-height: 100vh; }
+        body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        padding: 10px;
+        min-height: 100vh;            
+        --dot-bg: black;
+        --dot-color: #666666;
+        --dot-size: 0.5px;
+        --dot-space: 10px;
+            background:
+                linear-gradient(90deg, var(--dot-bg) calc(var(--dot-space) - var(--dot-size)), transparent 1%) center / var(--dot-space) var(--dot-space),
+                linear-gradient(var(--dot-bg) calc(var(--dot-space) - var(--dot-size)), transparent 1%) center / var(--dot-space) var(--dot-space),
+                var(--dot-color);
+        }        
         .container { max-width: 1800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: auto; min-height: calc(100vh - 20px); display: flex; flex-direction: column; }
         header {
             background: #417bb4;
@@ -40,11 +52,13 @@
             min-width: 50px;
             width: 120px;
         }
-        button { padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; }
-        button:hover { background: #2980b9; }
+        button { padding: 8px 16px; background: #2980b9; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; }
+        button:hover { background: #3498db; }
         button:disabled { background: #95a5a6; cursor: not-allowed; opacity: 0.6; }
-        button.success { background: #27ae60; }
-        button.success:hover { background: #229954; }
+        button.success {
+            background: #229954;
+        }
+        button.success:hover { background: #39b26c; }
         button.warning { background: #e67e22; }
         button.warning:hover { background: #d35400; }
         .image-grid-container { padding: 0px 20px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -110,7 +124,7 @@
         .pagination-controls span {
             font-weight: 500;
             color: #34495e;
-            margin-top: 8px;
+            margin-top: 2px;
         }
     </style>
 </head>
@@ -145,7 +159,7 @@
 
             <div class="pagination-controls">
                 <button onclick="previousPage()" id="prev-btn" disabled>◀ Previous</button>
-                <span id="page-info">Page 1 of 1</span>
+                <span>Page <input type="number" id="page-input" min="1" value="1" style="width: 70px; text-align: center; height: 30px;" onchange="goToPage()"> of <span id="total-pages">1</span></span>
                 <button onclick="nextPage()" id="next-btn" disabled>Next ▶</button>
             </div>            
 
@@ -457,12 +471,30 @@
             const tp = Math.ceil(totalImages / IMAGES_PER_PAGE); 
             console.log('updatePaginationButtons: currentPage=', currentPage, 'totalImages=', totalImages, 'totalPages=', tp);
             document.getElementById('prev-btn').disabled = currentPage === 0; 
-            document.getElementById('next-btn').disabled = currentPage >= tp - 1 || tp <= 1; 
-            document.getElementById('page-info').textContent = `Page ${currentPage + 1} of ${tp}`; 
+            document.getElementById('next-btn').disabled = currentPage >= tp - 1 || tp <= 1;
+            document.getElementById('page-input').value = currentPage + 1;
+            document.getElementById('page-input').max = tp;
+            document.getElementById('total-pages').textContent = tp;
             console.log('Prev disabled:', currentPage === 0, 'Next disabled:', currentPage >= tp - 1 || tp <= 1);
         }
         function previousPage() { console.log('previousPage clicked'); if (currentPage > 0) { currentPage--; loadImagesPage(); } }
         function nextPage() { console.log('nextPage clicked'); const tp = Math.ceil(totalImages / IMAGES_PER_PAGE); if (currentPage < tp - 1) { currentPage++; loadImagesPage(); } }
+        function goToPage() {
+            const pageInput = document.getElementById('page-input');
+            const targetPage = parseInt(pageInput.value) - 1; // Convert to 0-based index
+            const tp = Math.ceil(totalImages / IMAGES_PER_PAGE);
+            
+            // Validate page number
+            if (isNaN(targetPage) || targetPage < 0 || targetPage >= tp) {
+                // Reset to current page if invalid
+                pageInput.value = currentPage + 1;
+                return;
+            }
+            
+            // Navigate to the page
+            currentPage = targetPage;
+            loadImagesPage();
+        }
         
         window.onload = () => { /* Config loaded automatically on connect */ };
     </script>
