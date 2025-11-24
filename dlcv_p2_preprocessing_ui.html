@@ -39,13 +39,13 @@
         button.success:hover { background: #229954; }
         button.warning { background: #e67e22; }
         button.warning:hover { background: #d35400; }
-        .image-grid-container { padding: 20px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .image-grid-container { padding: 0px 20px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
         .image-grid { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; max-height: 100%; }
-        
         .image-cell {
             border-radius: 4px;
             overflow: hidden;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             position: relative;
@@ -54,8 +54,27 @@
             max-height: 100%;
             padding: 2px;
             box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
+            background: #f8f9fa;
         }
-
+        .image-cell .filename {
+            font-size: 10px;
+            font-weight: bold;
+            color: #696969;
+            padding: 2px 4px;
+            text-align: center;
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .image-cell .image-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            overflow: hidden;
+        }
         .image-cell img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
         .image-cell .placeholder { color: #95a5a6; font-size: 12px; }
         .loading { text-align: center; padding: 40px; color: #7f8c8d; }
@@ -70,27 +89,32 @@
             margin-top: 21px;
         }
         .pagination-controls button {
-    padding: 8px 12px;
-    font-size: 13px;
+            padding: 8px 12px;
+            font-size: 13px;
         }
         .pagination-controls span { font-weight: 500; color: #34495e; }
     </style>
 </head>
 <body>
     <div class="container">
-        <header><h1>Chest X-Ray Pre-Processing Configuration</h1></header>
+
+        <header><h1>Chest X-ray Preprocessing Configuration</h1></header>
+
         <div class="controls">
+
             <div class="control-row">
                 <div class="control-group"><label for="config-file">Configuration</label><select id="config-file" onchange="loadSelectedConfig()"><option value="">Loading...</option></select></div>
                 <div class="control-group"><label for="dataset">Dataset</label><select id="dataset" onchange="loadImages()"><option value="train">TRAIN</option><option value="test">TEST</option></select></div>
                 <div class="control-group"><label for="class-filter">Class Filter</label><select id="class-filter" onchange="loadImagesPage()"><option value="all">All</option><option value="NORMAL">NORMAL</option><option value="PNEUMONIA">PNEUMONIA</option></select></div>
                 <div class="control-group"><label for="dimension">Dimension</label><select id="dimension" onchange="onDimensionChange()"></select></div>
             </div>
+
             <div class="control-row">
+
                 <div class="control-group"><label for="h_crop">H-Crop (pixels)</label><input type="number" id="h_crop" min="0" step="1" value="0" onchange="loadImagesPage()"></div>
                 <div class="control-group"><label for="v_crop">V-Crop (pixels)</label><input type="number" id="v_crop" min="0" step="1" value="0" onchange="loadImagesPage()"></div>
-                <div class="control-group"><label for="clahe">CLAHE (clip limit)</label><input type="number" id="clahe" min="0" max="10" step="0.1" value="2.0" onchange="loadImagesPage()"></div>
-                <div class="control-group"><label for="zoom_in">Zoom In (factor)</label><input type="number" id="zoom_in" min="0" max="2" step="0.05" value="1.1" onchange="loadImagesPage()"></div>
+                <div class="control-group"><label for="clahe">CLAHE (clip limit)</label><input type="number" id="clahe" min="0" max="10" step="0.1" value="0" onchange="loadImagesPage()"></div>
+                <div class="control-group"><label for="zoom_in">Zoom In (factor)</label><input type="number" id="zoom_in" min="0" max="2" step="0.05" value="0" onchange="loadImagesPage()"></div>
                 <div class="control-group"><label>&nbsp;</label><button class="success" onclick="saveToConfig()">Save</button></div>
 
                 <div class="pagination-controls">
@@ -101,15 +125,18 @@
 
             </div>
         </div>
-        <div class="status" id="status"></div>
+
         <div class="info-box" id="info-box" style="display:none;">
-            <strong>Dimension Info</strong>
-            <span id="dimension-info"></span>
+            <label id="dimension-info"></label>
         </div>
+
         <div class="image-grid-container">
             <div id="loading" class="loading" style="display:none;">Loading images...</div>
             <div class="image-grid" id="image-grid"></div>
         </div>
+
+        <div class="status" id="status"></div>
+
     </div>
     <script>
         const socket = io("https://logus2k.com", {
@@ -117,6 +144,8 @@
         });
         let currentConfig = null, currentDimension = null, imageBuffers = {}, currentPage = 0, totalImages = 0, isLoadingConfig = false;
         const IMAGES_PER_PAGE = 18;
+        // Store filenames for each image index
+        let imageFilenames = {};
         
         socket.on('connect', () => { console.log('Connected'); showStatus('Connected to server', false); loadAvailableConfigs(); });
         socket.on('disconnect', () => showStatus('Disconnected', true));
@@ -125,9 +154,8 @@
             console.log('=== CONFIG_LOADED EVENT ===');
             console.log('Received config with dimensions:', Object.keys(c.dimensions || {}).length);
             currentConfig = c; 
-            currentDimension = null; // Clear current dimension
+            currentDimension = null;
             console.log('Set currentConfig, cleared currentDimension');
-            // Clear loading flag BEFORE populating dimensions
             isLoadingConfig = false;
             console.log('Cleared isLoadingConfig flag');
             const dataset = document.getElementById('dataset').value; 
@@ -139,14 +167,21 @@
         socket.on('config_saved', () => showStatus('Config saved!', false));
         socket.on('images_loaded', (d) => { 
             console.log('images_loaded event:', d); 
-            imageBuffers = {}; 
+            imageBuffers = {};
+            imageFilenames = {};
             totalImages = d.total_available || d.count; 
             console.log('totalImages set to:', totalImages);
             document.getElementById('info-box').style.display = 'block'; 
-            document.getElementById('dimension-info').textContent = `Dimension: ${d.dimension} | Dataset: ${d.dataset.toUpperCase()} | Total: ${totalImages}`; 
+            document.getElementById('dimension-info').innerHTML = `Dimension: <b>${d.dimension}</b> | Dataset: <b>${d.dataset.toUpperCase()}</b> | Total: <b>${totalImages}</b>`; 
             updatePaginationButtons(); 
         });
-        socket.on('image_data', (d) => { imageBuffers[d.index] = d.data; displayImage(d.index, d.data); });
+        socket.on('image_data', (d) => { 
+            imageBuffers[d.index] = d.data;
+            if (d.filename) {
+                imageFilenames[d.index] = d.filename;
+            }
+            displayImage(d.index, d.data, d.filename); 
+        });
         socket.on('error', (d) => showStatus(`Error: ${d.message}`, true));
         
         function showStatus(m, e = false) { const s = document.getElementById('status'); s.textContent = m; s.className = 'status' + (e ? ' error' : ''); s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 3000); }
@@ -167,7 +202,6 @@
                     s.appendChild(o);
                 });
                 
-                // Auto-load first config
                 s.value = configs[0];
                 loadSelectedConfig();
             } else {
@@ -181,24 +215,18 @@
             console.log('New config file:', configFile);
             console.log('Old currentDimension:', currentDimension);
             if (configFile) {
-                // Set loading flag to prevent parameter changes from triggering loads
                 isLoadingConfig = true;
-                
-                // Reset state
                 currentDimension = null;
                 currentPage = 0;
                 totalImages = 0;
                 
                 console.log('Cleared currentDimension:', currentDimension);
                 
-                // Clear grid
                 const grid = document.getElementById('image-grid');
                 grid.innerHTML = '';
                 
-                // Hide info box
                 document.getElementById('info-box').style.display = 'none';
                 
-                // Load new config
                 console.log('Emitting load_config for:', configFile);
                 socket.emit('load_config', configFile);
             }
@@ -206,7 +234,7 @@
         
         function populateDimensionList(c, dataset = 'train') { 
             const s = document.getElementById('dimension'); 
-            s.innerHTML = ''; // Clear existing options
+            s.innerHTML = '';
             
             if (c && c.dimensions) {
                 const dimensions = Object.keys(c.dimensions);
@@ -216,12 +244,10 @@
                     const dimConfig = c.dimensions[d];
                     const allPaths = dimConfig.image_paths || [];
                     
-                    // Filter paths by dataset
                     const datasetDir = dataset === 'train' ? 'chest_xray/train' : 'chest_xray/test';
                     const datasetPaths = allPaths.filter(p => p.includes(datasetDir));
                     const count = datasetPaths.length;
                     
-                    // Only show dimensions that have images in this dataset
                     if (count > 0) {
                         const o = document.createElement('option'); 
                         o.value = d; 
@@ -231,10 +257,9 @@
                     }
                 });
                 
-                // Auto-select first dimension and load images
                 if (validDimensions.length > 0) {
                     s.value = validDimensions[0];
-                    currentDimension = validDimensions[0]; // Update current dimension
+                    currentDimension = validDimensions[0];
                     onDimensionChange();
                 } else {
                     showStatus('No dimensions found for this dataset', true);
@@ -251,7 +276,6 @@
             const p = currentConfig.dimensions[d];
             console.log('Loading params from config:', p);
             
-            // Temporarily disable onchange to prevent triggering loads
             const hCrop = document.getElementById('h_crop');
             const vCrop = document.getElementById('v_crop');
             const clahe = document.getElementById('clahe');
@@ -267,7 +291,6 @@
             clahe.onchange = null;
             zoomIn.onchange = null;
             
-            // Update values
             hCrop.value = p.h_crop || 0;
             vCrop.value = p.v_crop || 0;
             clahe.value = p.clahe || 0;
@@ -275,7 +298,6 @@
             
             console.log('Updated input values to:', {h_crop: hCrop.value, v_crop: vCrop.value, clahe: clahe.value, zoom_in: zoomIn.value});
             
-            // Restore onchange handlers
             hCrop.onchange = oldHOnchange;
             vCrop.onchange = oldVOnchange;
             clahe.onchange = oldClaheOnchange;
@@ -304,19 +326,17 @@
                 return;
             }
             const dataset = document.getElementById('dataset').value;
-            // Repopulate dimension list for new dataset
             populateDimensionList(currentConfig, dataset);
         }
         
         function ensureGridExists() {
             const g = document.getElementById('image-grid');
-            // Only create cells if grid is empty
             if (g.children.length === 0) {
                 for (let i = 0; i < 18; i++) {
                     const c = document.createElement('div');
                     c.className = 'image-cell';
                     c.id = `cell-${i}`;
-                    c.innerHTML = '<span class="placeholder">Empty</span>';
+                    c.innerHTML = '<div class="filename"></div><div class="image-wrapper"><span class="placeholder">Empty</span></div>';
                     g.appendChild(c);
                 }
             }
@@ -325,7 +345,6 @@
         function loadImagesPage() { 
             console.log('loadImagesPage called - isLoadingConfig:', isLoadingConfig, 'currentDimension:', currentDimension);
             
-            // Don't load if we're switching configs
             if (isLoadingConfig) {
                 console.log('Config loading in progress, skipping image load');
                 return;
@@ -336,7 +355,6 @@
                 return;
             }
             
-            // Validate dimension exists in current config
             if (!currentConfig || !currentConfig.dimensions || !currentConfig.dimensions[currentDimension]) {
                 console.error('Current dimension not found in config:', currentDimension);
                 console.error('Available dimensions:', currentConfig ? Object.keys(currentConfig.dimensions || {}) : 'no config');
@@ -346,14 +364,12 @@
             
             console.log('Loading images for dimension:', currentDimension);
             
-            // Ensure grid exists
             ensureGridExists();
             
-            // Reset all cells to loading state without recreating them
             for (let i = 0; i < 18; i++) {
                 const cell = document.getElementById(`cell-${i}`);
                 if (cell) {
-                    cell.innerHTML = '<span class="placeholder">Loading...</span>';
+                    cell.innerHTML = '<div class="filename"></div><div class="image-wrapper"><span class="placeholder">Loading...</span></div>';
                 }
             }
             
@@ -374,20 +390,35 @@
         }
         function getCurrentParams() { return { h_crop: parseFloat(document.getElementById('h_crop').value) || 0, v_crop: parseFloat(document.getElementById('v_crop').value) || 0, clahe: parseFloat(document.getElementById('clahe').value) || 0, zoom_in: parseFloat(document.getElementById('zoom_in').value) || 0 }; }
         function updatePreview() { if (!currentDimension) { showStatus('Load images first', true); return; } loadImagesPage(); }
-        function displayImage(i, d) { 
+        function displayImage(i, d, filename) {
+            console.log('displayImage called: index=', i, 'filename=', filename);
             const c = document.getElementById(`cell-${i}`); 
-            if (!c) return; 
+            if (!c) {
+                console.log('Cell not found:', `cell-${i}`);
+                return;
+            }
             const b = new Blob([d], { type: 'image/png' }); 
             const url = URL.createObjectURL(b);
             
-            // Check if image already exists
-            let img = c.querySelector('img');
-            if (img) {
-                // Reuse existing img element, just change src
-                img.src = url;
+            const filenameDiv = c.querySelector('.filename');
+            const imageWrapper = c.querySelector('.image-wrapper');
+            
+            console.log('filenameDiv found:', !!filenameDiv, 'imageWrapper found:', !!imageWrapper);
+            
+            if (filenameDiv && filename) {
+                filenameDiv.textContent = filename;
+                console.log('Set filename to:', filename);
             } else {
-                // Create new img element
-                c.innerHTML = `<img src="${url}">`;
+                console.log('Skipped setting filename - filenameDiv:', !!filenameDiv, 'filename:', filename);
+            }
+            
+            if (imageWrapper) {
+                let img = imageWrapper.querySelector('img');
+                if (img) {
+                    img.src = url;
+                } else {
+                    imageWrapper.innerHTML = `<img src="${url}">`;
+                }
             }
             
             document.getElementById('loading').style.display = 'none'; 

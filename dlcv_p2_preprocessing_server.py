@@ -364,7 +364,8 @@ async def get_dimension_images(sid, data):
         if success:
             images_data.append({
                 'index': idx,
-                'data': buffer.tobytes()
+                'data': buffer.tobytes(),
+                'filename': os.path.basename(path)
             })
     
     # Send images info - use exact count from filtered paths

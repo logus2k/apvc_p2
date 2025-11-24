@@ -277,9 +277,12 @@ class DimensionAnalyzer:
             w_center, h_center = bin_info['center']
             bin_dimensions = bin_info['dimensions']  # List of (w, h) tuples in this bin
             
+            # Deduplicate dimensions - same dimension can appear multiple times in self.dimensions
+            unique_dimensions = list(set(bin_dimensions))
+            
             # Collect all image paths for dimensions in this bin
             bin_image_paths = []
-            for (w, h) in bin_dimensions:
+            for (w, h) in unique_dimensions:
                 if (w, h) in all_image_paths:
                     bin_image_paths.extend(all_image_paths[(w, h)])
             
@@ -309,10 +312,10 @@ class DimensionAnalyzer:
                 "count": len(bin_image_paths),
                 "center_dimension": f"{w_center}x{h_center}",
                 "image_paths": bin_image_paths,
-                "h_crop": h_crop,
-                "v_crop": v_crop,
-                "clahe": 2.0,
-                "zoom_in": 1.1
+                "h_crop": 0,
+                "v_crop": 0,
+                "clahe": 0,
+                "zoom_in": 0
             }
         
         # Write to file
