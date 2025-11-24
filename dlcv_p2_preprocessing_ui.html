@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chest X-Ray - Project 2</title>
+    <script src="/cxray/static/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #f5f5f5; padding: 10px; height: 100vh; overflow: hidden; }
+        .container { max-width: 1800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; height: calc(100vh - 40px); display: flex; flex-direction: column; }
+        header { background: #2c3e50; color: white; padding: 20px; flex-shrink: 0; }
+        h1 { font-size: 24px; font-weight: 600; }
+        .controls { padding: 20px; background: #ecf0f1; border-bottom: 1px solid #bdc3c7; flex-shrink: 0; }
+        .control-row { display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 13px; font-weight: 500; color: #34495e; }
+        select, input[type="number"] { padding: 8px 12px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 14px; min-width: 150px; }
+        input[type="number"] { min-width: 100px; }
+        button { padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; opacity: 0.6; }
+        button.success { background: #27ae60; }
+        button.success:hover { background: #229954; }
+        button.warning { background: #e67e22; }
+        button.warning:hover { background: #d35400; }
+        .image-grid-container { padding: 20px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .image-grid { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; max-height: 100%; }
+        
+        .image-cell {
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            max-height: 100%;
+            padding: 2px;
+            box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
+        }
+
+        .image-cell img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+        .image-cell .placeholder { color: #95a5a6; font-size: 12px; }
+        .loading { text-align: center; padding: 40px; color: #7f8c8d; }
+        .status { padding: 10px 20px; background: #d5f4e6; border-left: 4px solid #27ae60; margin: 10px 20px; border-radius: 4px; font-size: 14px; display: none; flex-shrink: 0; }
+        .status.error { background: #fadbd8; border-left-color: #e74c3c; }
+        .info-box { background: #e8f4f8; padding: 15px; margin: 15px 20px; border-radius: 4px; font-size: 13px; color: #2c3e50; flex-shrink: 0; }
+        .info-box strong { display: block; margin-bottom: 5px; font-size: 14px; }
+        .pagination-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+        .pagination-controls button { padding: 6px 12px; font-size: 13px; }
+        .pagination-controls span { font-weight: 500; color: #34495e; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header><h1>Chest X-Ray Pre-Processing Configuration</h1></header>
+        <div class="controls">
+            <div class="control-row">
+                <div class="control-group"><label for="config-file">Configuration</label><select id="config-file" onchange="loadSelectedConfig()"><option value="">Loading...</option></select></div>
+                <div class="control-group"><label for="dataset">Dataset</label><select id="dataset" onchange="loadImages()"><option value="train">TRAIN</option><option value="test">TEST</option></select></div>
+                <div class="control-group"><label for="class-filter">Class Filter</label><select id="class-filter" onchange="loadImagesPage()"><option value="all">All</option><option value="NORMAL">NORMAL</option><option value="PNEUMONIA">PNEUMONIA</option></select></div>
+                <div class="control-group"><label for="dimension">Dimension</label><select id="dimension" onchange="onDimensionChange()"></select></div>
+            </div>
+            <div class="control-row">
+                <div class="control-group"><label for="h_crop">H-Crop (pixels)</label><input type="number" id="h_crop" min="0" step="1" value="0" onchange="loadImagesPage()"></div>
+                <div class="control-group"><label for="v_crop">V-Crop (pixels)</label><input type="number" id="v_crop" min="0" step="1" value="0" onchange="loadImagesPage()"></div>
+                <div class="control-group"><label for="clahe">CLAHE (clip limit)</label><input type="number" id="clahe" min="0" max="10" step="0.1" value="2.0" onchange="loadImagesPage()"></div>
+                <div class="control-group"><label for="zoom_in">Zoom In (factor)</label><input type="number" id="zoom_in" min="0" max="2" step="0.05" value="1.1" onchange="loadImagesPage()"></div>
+                <div class="control-group"><label>&nbsp;</label><button class="success" onclick="saveToConfig()">Save</button></div>
+            </div>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="info-box" id="info-box" style="display:none;">
+            <strong>Dimension Info</strong>
+            <span id="dimension-info"></span>
+            <div class="pagination-controls">
+                <button onclick="previousPage()" id="prev-btn" disabled>◀ Previous</button>
+                <span id="page-info">Page 1 of 1</span>
+                <button onclick="nextPage()" id="next-btn" disabled>Next ▶</button>
+            </div>
+        </div>
+        <div class="image-grid-container">
+            <div id="loading" class="loading" style="display:none;">Loading images...</div>
+            <div class="image-grid" id="image-grid"></div>
+        </div>
+    </div>
+    <script>
+        const socket = io("https://logus2k.com", {
+            path: "/cxray/socket.io/"
+        });
+        let currentConfig = null, currentDimension = null, imageBuffers = {}, currentPage = 0, totalImages = 0, isLoadingConfig = false;
+        const IMAGES_PER_PAGE = 18;
+        
+        socket.on('connect', () => { console.log('Connected'); showStatus('Connected to server', false); loadAvailableConfigs(); });
+        socket.on('disconnect', () => showStatus('Disconnected', true));
+        socket.on('available_configs', (configs) => { populateConfigList(configs); });
+        socket.on('config_loaded', (c) => {
+            console.log('=== CONFIG_LOADED EVENT ===');
+            console.log('Received config with dimensions:', Object.keys(c.dimensions || {}).length);
+            currentConfig = c; 
+            currentDimension = null; // Clear current dimension
+            console.log('Set currentConfig, cleared currentDimension');
+            // Clear loading flag BEFORE populating dimensions
+            isLoadingConfig = false;
+            console.log('Cleared isLoadingConfig flag');
+            const dataset = document.getElementById('dataset').value; 
+            console.log('About to populate dimensions for dataset:', dataset);
+            populateDimensionList(c, dataset); 
+            showStatus('Config loaded', false);
+            console.log('=== CONFIG_LOADED COMPLETE ===');
+        });
+        socket.on('config_saved', () => showStatus('Config saved!', false));
+        socket.on('images_loaded', (d) => { 
+            console.log('images_loaded event:', d); 
+            imageBuffers = {}; 
+            totalImages = d.total_available || d.count; 
+            console.log('totalImages set to:', totalImages);
+            document.getElementById('info-box').style.display = 'block'; 
+            document.getElementById('dimension-info').textContent = `Dimension: ${d.dimension} | Dataset: ${d.dataset.toUpperCase()} | Total: ${totalImages}`; 
+            updatePaginationButtons(); 
+        });
+        socket.on('image_data', (d) => { imageBuffers[d.index] = d.data; displayImage(d.index, d.data); });
+        socket.on('error', (d) => showStatus(`Error: ${d.message}`, true));
+        
+        function showStatus(m, e = false) { const s = document.getElementById('status'); s.textContent = m; s.className = 'status' + (e ? ' error' : ''); s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 3000); }
+        
+        function loadAvailableConfigs() {
+            socket.emit('get_available_configs');
+        }
+        
+        function populateConfigList(configs) {
+            const s = document.getElementById('config-file');
+            s.innerHTML = '';
+            
+            if (configs && configs.length > 0) {
+                configs.forEach(filename => {
+                    const o = document.createElement('option');
+                    o.value = filename;
+                    o.textContent = filename;
+                    s.appendChild(o);
+                });
+                
+                // Auto-load first config
+                s.value = configs[0];
+                loadSelectedConfig();
+            } else {
+                s.innerHTML = '<option value="">No configs found</option>';
+            }
+        }
+        
+        function loadSelectedConfig() {
+            const configFile = document.getElementById('config-file').value;
+            console.log('=== SWITCHING CONFIG ===');
+            console.log('New config file:', configFile);
+            console.log('Old currentDimension:', currentDimension);
+            if (configFile) {
+                // Set loading flag to prevent parameter changes from triggering loads
+                isLoadingConfig = true;
+                
+                // Reset state
+                currentDimension = null;
+                currentPage = 0;
+                totalImages = 0;
+                
+                console.log('Cleared currentDimension:', currentDimension);
+                
+                // Clear grid
+                const grid = document.getElementById('image-grid');
+                grid.innerHTML = '';
+                
+                // Hide info box
+                document.getElementById('info-box').style.display = 'none';
+                
+                // Load new config
+                console.log('Emitting load_config for:', configFile);
+                socket.emit('load_config', configFile);
+            }
+        }
+        
+        function populateDimensionList(c, dataset = 'train') { 
+            const s = document.getElementById('dimension'); 
+            s.innerHTML = ''; // Clear existing options
+            
+            if (c && c.dimensions) {
+                const dimensions = Object.keys(c.dimensions);
+                const validDimensions = [];
+                
+                dimensions.forEach(d => { 
+                    const dimConfig = c.dimensions[d];
+                    const allPaths = dimConfig.image_paths || [];
+                    
+                    // Filter paths by dataset
+                    const datasetDir = dataset === 'train' ? 'chest_xray/train' : 'chest_xray/test';
+                    const datasetPaths = allPaths.filter(p => p.includes(datasetDir));
+                    const count = datasetPaths.length;
+                    
+                    // Only show dimensions that have images in this dataset
+                    if (count > 0) {
+                        const o = document.createElement('option'); 
+                        o.value = d; 
+                        o.textContent = `${d} (${count})`; 
+                        s.appendChild(o);
+                        validDimensions.push(d);
+                    }
+                });
+                
+                // Auto-select first dimension and load images
+                if (validDimensions.length > 0) {
+                    s.value = validDimensions[0];
+                    currentDimension = validDimensions[0]; // Update current dimension
+                    onDimensionChange();
+                } else {
+                    showStatus('No dimensions found for this dataset', true);
+                }
+            }
+        }
+        function loadConfig() { socket.emit('load_config'); }
+        function loadDimensionParams(d) {
+            console.log('loadDimensionParams called for dimension:', d);
+            if (!currentConfig || !currentConfig.dimensions || !currentConfig.dimensions[d]) {
+                console.log('Dimension not found in config, returning');
+                return;
+            }
+            const p = currentConfig.dimensions[d];
+            console.log('Loading params from config:', p);
+            
+            // Temporarily disable onchange to prevent triggering loads
+            const hCrop = document.getElementById('h_crop');
+            const vCrop = document.getElementById('v_crop');
+            const clahe = document.getElementById('clahe');
+            const zoomIn = document.getElementById('zoom_in');
+            
+            const oldHOnchange = hCrop.onchange;
+            const oldVOnchange = vCrop.onchange;
+            const oldClaheOnchange = clahe.onchange;
+            const oldZoomOnchange = zoomIn.onchange;
+            
+            hCrop.onchange = null;
+            vCrop.onchange = null;
+            clahe.onchange = null;
+            zoomIn.onchange = null;
+            
+            // Update values
+            hCrop.value = p.h_crop || 0;
+            vCrop.value = p.v_crop || 0;
+            clahe.value = p.clahe || 0;
+            zoomIn.value = p.zoom_in || 0;
+            
+            console.log('Updated input values to:', {h_crop: hCrop.value, v_crop: vCrop.value, clahe: clahe.value, zoom_in: zoomIn.value});
+            
+            // Restore onchange handlers
+            hCrop.onchange = oldHOnchange;
+            vCrop.onchange = oldVOnchange;
+            clahe.onchange = oldClaheOnchange;
+            zoomIn.onchange = oldZoomOnchange;
+        }
+        function onDimensionChange() {
+            console.log('onDimensionChange called');
+            const d = document.getElementById('dimension').value;
+            console.log('Selected dimension:', d);
+            if (d && currentConfig && currentConfig.dimensions && currentConfig.dimensions[d]) {
+                currentDimension = d;
+                currentPage = 0;
+                console.log('About to load dimension params');
+                loadDimensionParams(d);
+                console.log('About to ensure grid and load images');
+                ensureGridExists();
+                loadImagesPage();
+            } else if (d) {
+                console.warn('Dimension not found in current config:', d);
+            }
+        }
+        
+        function loadImages() { 
+            if (!currentConfig) {
+                showStatus('Config not loaded yet', true);
+                return;
+            }
+            const dataset = document.getElementById('dataset').value;
+            // Repopulate dimension list for new dataset
+            populateDimensionList(currentConfig, dataset);
+        }
+        
+        function ensureGridExists() {
+            const g = document.getElementById('image-grid');
+            // Only create cells if grid is empty
+            if (g.children.length === 0) {
+                for (let i = 0; i < 18; i++) {
+                    const c = document.createElement('div');
+                    c.className = 'image-cell';
+                    c.id = `cell-${i}`;
+                    c.innerHTML = '<span class="placeholder">Empty</span>';
+                    g.appendChild(c);
+                }
+            }
+        }
+        
+        function loadImagesPage() { 
+            console.log('loadImagesPage called - isLoadingConfig:', isLoadingConfig, 'currentDimension:', currentDimension);
+            
+            // Don't load if we're switching configs
+            if (isLoadingConfig) {
+                console.log('Config loading in progress, skipping image load');
+                return;
+            }
+            
+            if (!currentDimension) {
+                console.log('No currentDimension set, returning');
+                return;
+            }
+            
+            // Validate dimension exists in current config
+            if (!currentConfig || !currentConfig.dimensions || !currentConfig.dimensions[currentDimension]) {
+                console.error('Current dimension not found in config:', currentDimension);
+                console.error('Available dimensions:', currentConfig ? Object.keys(currentConfig.dimensions || {}) : 'no config');
+                showStatus('Invalid dimension selected', true);
+                return;
+            }
+            
+            console.log('Loading images for dimension:', currentDimension);
+            
+            // Ensure grid exists
+            ensureGridExists();
+            
+            // Reset all cells to loading state without recreating them
+            for (let i = 0; i < 18; i++) {
+                const cell = document.getElementById(`cell-${i}`);
+                if (cell) {
+                    cell.innerHTML = '<span class="placeholder">Loading...</span>';
+                }
+            }
+            
+            const p = getCurrentParams(); 
+            const classFilter = document.getElementById('class-filter').value;
+            const configFile = document.getElementById('config-file').value;
+            console.log('Requesting images: page', currentPage, 'offset', currentPage * IMAGES_PER_PAGE, 'params', p, 'class', classFilter, 'config', configFile);
+            socket.emit('get_dimension_images', { 
+                config_file: configFile,
+                dimension: currentDimension, 
+                dataset: document.getElementById('dataset').value, 
+                class_filter: classFilter, 
+                params: p, 
+                offset: currentPage * IMAGES_PER_PAGE, 
+                limit: IMAGES_PER_PAGE 
+            }); 
+            document.getElementById('loading').style.display = 'block'; 
+        }
+        function getCurrentParams() { return { h_crop: parseFloat(document.getElementById('h_crop').value) || 0, v_crop: parseFloat(document.getElementById('v_crop').value) || 0, clahe: parseFloat(document.getElementById('clahe').value) || 0, zoom_in: parseFloat(document.getElementById('zoom_in').value) || 0 }; }
+        function updatePreview() { if (!currentDimension) { showStatus('Load images first', true); return; } loadImagesPage(); }
+        function displayImage(i, d) { 
+            const c = document.getElementById(`cell-${i}`); 
+            if (!c) return; 
+            const b = new Blob([d], { type: 'image/png' }); 
+            const url = URL.createObjectURL(b);
+            
+            // Check if image already exists
+            let img = c.querySelector('img');
+            if (img) {
+                // Reuse existing img element, just change src
+                img.src = url;
+            } else {
+                // Create new img element
+                c.innerHTML = `<img src="${url}">`;
+            }
+            
+            document.getElementById('loading').style.display = 'none'; 
+        }
+        function saveToConfig() { 
+            const d = document.getElementById('dimension').value; 
+            const configFile = document.getElementById('config-file').value;
+            if (!d || !currentConfig) { showStatus('Select dimension', true); return; } 
+            if (!configFile) { showStatus('No config file selected', true); return; }
+            const p = getCurrentParams(); 
+            currentConfig.dimensions[d] = { ...currentConfig.dimensions[d], ...p }; 
+            socket.emit('save_config_data', { filename: configFile, config: currentConfig }); 
+        }
+        function updatePaginationButtons() { 
+            const tp = Math.ceil(totalImages / IMAGES_PER_PAGE); 
+            console.log('updatePaginationButtons: currentPage=', currentPage, 'totalImages=', totalImages, 'totalPages=', tp);
+            document.getElementById('prev-btn').disabled = currentPage === 0; 
+            document.getElementById('next-btn').disabled = currentPage >= tp - 1 || tp <= 1; 
+            document.getElementById('page-info').textContent = `Page ${currentPage + 1} of ${tp}`; 
+            console.log('Prev disabled:', currentPage === 0, 'Next disabled:', currentPage >= tp - 1 || tp <= 1);
+        }
+        function previousPage() { console.log('previousPage clicked'); if (currentPage > 0) { currentPage--; loadImagesPage(); } }
+        function nextPage() { console.log('nextPage clicked'); const tp = Math.ceil(totalImages / IMAGES_PER_PAGE); if (currentPage < tp - 1) { currentPage++; loadImagesPage(); } }
+        
+        window.onload = () => { /* Config loaded automatically on connect */ };
+    </script>
+</body>
+</html>

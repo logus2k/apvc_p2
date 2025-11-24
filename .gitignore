@@ -9,3 +9,7 @@ include/
 share/
 lib64
 pyvenv.cfg
+
+# Temporary work files
+results/
+*.keras
