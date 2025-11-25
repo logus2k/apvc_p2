@@ -236,3 +236,18 @@ button.warning:hover {
     font-weight: 500;
     color: #34495e;
 }
+
+.du-tooltip {
+    position: fixed;
+    background: rgba(20, 20, 20, 0.95);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    max-width: 260px;
+    pointer-events: none;
+    z-index: 9999;
+    white-space: pre-line;
+    line-height: 1.3;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}

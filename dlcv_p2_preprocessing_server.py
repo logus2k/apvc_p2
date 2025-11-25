@@ -52,8 +52,30 @@ socket_app = socketio.ASGIApp(
 
 # Global configuration
 config_data = None
-dimension_cache = {}  # Cache: {dataset: {dimension: [paths]}}
+# Cache: {dataset: {dimension: [paths]}}
+dimension_cache = {}
 
+
+# Load DU metrics into memory
+DU_METRICS_PATH = "./static/du_metrics.json"
+
+if os.path.exists(DU_METRICS_PATH):
+    with open(DU_METRICS_PATH, "r") as f:
+        du_records = json.load(f)
+else:
+    du_records = []
+
+# Convert list of records into dictionary using image_path as key
+DU_LOOKUP = {rec["image_path"]: rec for rec in du_records}
+
+print(f"Loaded {len(DU_LOOKUP)} DU metric records.")
+
+
+def get_du_metrics(image_path):
+    """Return the DU metrics for the given image path, or an empty dict if unavailable."""
+    # Normalize paths to the same style used in DF_VIEW export
+    normalized = image_path.replace("\\", "/")
+    return DU_LOOKUP.get(normalized, {})
 
 def build_dimension_cache(dataset: str = 'train'):
     """
@@ -297,7 +319,8 @@ async def get_dimension_images(sid, data):
     Get images for a specific dimension using exact paths from config.
     
     Args:
-        data: dict with 'config_file', 'dimension', 'dataset', 'class_filter', 'params', 'offset', and 'limit'
+        data: dict with 'config_file', 'dimension', 'dataset', 'class_filter',
+        'params', 'offset', and 'limit'
     """
     config_file = data.get('config_file')
     dimension = data.get('dimension')
@@ -351,7 +374,6 @@ async def get_dimension_images(sid, data):
     images_data = []
     
     for idx, path in enumerate(paginated_paths):
-        # Load image
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
@@ -361,14 +383,23 @@ async def get_dimension_images(sid, data):
         
         # Encode as PNG
         success, buffer = cv2.imencode('.png', processed)
-        if success:
-            images_data.append({
-                'index': idx,
-                'data': buffer.tobytes(),
-                'filename': os.path.basename(path)
-            })
+        if not success:
+            continue
+
+        # Retrieve DU metrics for this image
+        normalized_path = path.replace("\\", "/")
+        du_info = get_du_metrics(normalized_path)
+
+        # Include DU metrics in the payload
+        images_data.append({
+            'index': idx,
+            'data': buffer.tobytes(),
+            'filename': os.path.basename(path),
+            'path': normalized_path,       # helpful for the frontend
+            'du': du_info                  # DU metrics added here
+        })
     
-    # Send images info - use exact count from filtered paths
+    # Send info about how many images were loaded
     await sio.emit('images_loaded', {
         'dimension': dimension,
         'dataset': dataset,
@@ -376,7 +407,7 @@ async def get_dimension_images(sid, data):
         'total_available': len(all_image_paths)
     }, room=sid)
     
-    # Send each image separately as binary
+    # Send the images one by one
     for img_data in images_data:
         await sio.emit('image_data', img_data, room=sid)
 

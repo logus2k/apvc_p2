@@ -45,17 +45,32 @@ socket.on('images_loaded', (d) => {
     window.receivedImageCount = 0;
 });
 
-socket.on('image_data', (d) => {
-    imageBuffers[d.index] = d.data;
-    if (d.filename) {
-        imageFilenames[d.index] = d.filename;
-    }
-    displayImage(d.index, d.data, d.filename);
 
-    // Track received images and mark empty cells once all images are received
+// Storage for DU metrics
+const imageDU = {};
+
+socket.on('image_data', (d) => {
+    const index = d.index;
+
+    // Store raw image buffer
+    imageBuffers[index] = d.data;
+
+    // Store filename
+    if (d.filename) {
+        imageFilenames[index] = d.filename;
+    }
+
+    // Store DU metrics (if provided)
+    imageDU[index] = d.du || {};
+
+    // Render image
+    displayImage(index, d.data, d.filename, d.du || {});
+
+    // Track received images
     window.receivedImageCount++;
+
     if (window.receivedImageCount === window.expectedImageCount) {
-        // Mark any remaining cells as empty
+        // Mark empty cells
         for (let i = window.expectedImageCount; i < 18; i++) {
             const cell = document.getElementById(`cell-${i}`);
             if (cell) {
@@ -69,7 +84,49 @@ socket.on('image_data', (d) => {
     }
 });
 
+
 socket.on('error', (d) => showStatus(`Error: ${d.message}`, true));
+
+
+const duTooltip = document.getElementById("du-tooltip");
+
+// Listen for hover on image cells
+document.addEventListener("mousemove", (event) => {
+    const cell = event.target.closest(".image-cell");
+
+    if (!cell || !cell.dataset.du) {
+        duTooltip.style.display = "none";
+        return;
+    }
+
+    // Parse DU metrics
+    let metrics = {};
+    try {
+        metrics = JSON.parse(cell.dataset.du);
+    } catch (e) {
+        duTooltip.style.display = "none";
+        return;
+    }
+
+    // Build tooltip text (compact formatting)
+    let text = "";
+    for (const [key, value] of Object.entries(metrics)) {
+        text += `${key}: ${value}\n`;
+    }
+
+    duTooltip.textContent = text.trim();
+    duTooltip.style.display = "block";
+
+    // Position tooltip near cursor
+    duTooltip.style.left = event.pageX + 15 + "px";
+    duTooltip.style.top = event.pageY + 15 + "px";
+});
+
+// Hide tooltip on mouse leave
+document.addEventListener("mouseleave", () => {
+    duTooltip.style.display = "none";
+});
+
 
 function showStatus(m, e = false) { const s = document.getElementById('status'); s.textContent = m; s.className = 'status' + (e ? ' error' : ''); s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 3000); }
 
@@ -283,24 +340,25 @@ function getCurrentParams() { return { h_crop: parseFloat(document.getElementByI
 
 function updatePreview() { if (!currentDimension) { showStatus('Load images first', true); return; } loadImagesPage(); }
 
-function displayImage(i, d, filename) {
+function displayImage(i, d, filename, du = {}) {
     const c = document.getElementById(`cell-${i}`);
     if (!c) {
         console.log('Cell not found:', `cell-${i}`);
         return;
     }
-    const b = new Blob([d], { type: 'image/png' });
-    const url = URL.createObjectURL(b);
+
+    const blob = new Blob([d], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
 
     const filenameDiv = c.querySelector('.filename');
     const imageWrapper = c.querySelector('.image-wrapper');
 
+    // Update filename
     if (filenameDiv && filename) {
         filenameDiv.textContent = filename;
-    } else {
-        console.log('Skipped setting filename - filenameDiv:', !!filenameDiv, 'filename:', filename);
     }
 
+    // Update image element
     if (imageWrapper) {
         let img = imageWrapper.querySelector('img');
         if (img) {
@@ -309,6 +367,9 @@ function displayImage(i, d, filename) {
             imageWrapper.innerHTML = `<img src="${url}">`;
         }
     }
+
+    // Attach DU metrics to DOM element for later use
+    c.dataset.du = JSON.stringify(du);
 
     document.getElementById('loading').style.display = 'none';
 }
