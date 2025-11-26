@@ -1,6 +1,6 @@
 {
   "global_settings": {
-    "allowed_variation": 10.0,
+    "allowed_variation": 10,
     "h_crop": true,
     "v_crop": true,
     "clahe": true,
@@ -222,7 +222,7 @@
       ],
       "h_crop": 0,
       "v_crop": 0,
-      "clahe": 0,
+      "clahe": 2,
       "zoom_in": 0
     },
     "NORMAL2-IM-0246-0001-0001_to_person9_bacteria_39": {
