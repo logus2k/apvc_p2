@@ -26,6 +26,7 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     overflow: auto;
     min-height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
     display: flex;
     flex-direction: column;
 }
@@ -122,7 +123,7 @@ button.warning:hover {
 }
 
 .image-grid-container {
-    padding: 0px 5px;
+    padding: 0px 5px 5px 5px;
     flex: 1;
     min-height: 0;
     display: flex;
@@ -250,4 +251,62 @@ button.warning:hover {
     white-space: pre-line;
     line-height: 1.3;
     box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.du-slider-panel {
+    padding: 0px 10px 0px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 45px;
+    align-items: flex-start;
+}
+
+.du-slider-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #34495e;
+    margin: 0px 0px 8px -5px;
+}
+
+.du-slider {
+    width: 160px;
+    height: 5px;
+}
+
+/* noUiSlider customization - use !important to override library defaults */
+.noUi-target {
+    background: #e0e0e0;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.noUi-connect {
+    background: #2980b9 !important;
+}
+
+.noUi-handle {
+    width: 14px !important;
+    height: 14px !important;
+    border-radius: 2px !important;
+    background: #fff !important;
+    border: 2px solid #2980b9 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+    cursor: pointer !important;
+}
+
+.noUi-handle:before,
+.noUi-handle:after {
+    display: none !important;
+}
+
+.noUi-horizontal .noUi-handle {
+    width: 14px !important;
+    height: 14px !important;
+    right: -7px !important;
+    top: -5px !important;
+}
+
+.noUi-horizontal {
+    height: 7px !important;
 }

@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chest X-Ray - Project 2</title>
     <link rel="stylesheet" href="/cxray/static/styles.css" />
+    <link rel="stylesheet" href="/cxray/static/nouislider.min.css" />
     <script src="/cxray/static/socket.io.min.js"></script>
+    <script src="/cxray/static/nouislider.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -30,6 +32,11 @@
                 <div class="control-group"><label>&nbsp;</label><button class="success" onclick="saveToConfig()">Save</button></div>
 
             </div>
+
+            <div class="control-row">
+                <div id="du-slider-panel" class="du-slider-panel"></div>
+            </div>
+
         </div>
 
         <div class="info-box" id="info-box" style="display:none;">
@@ -40,7 +47,7 @@
                 <button onclick="previousPage()" id="prev-btn" disabled>◀ &nbsp;Previous</button>
                 <span>Page <input type="number" id="page-input" min="1" value="1" style="width: 65px; text-align: right; height: 33px;" onchange="goToPage()"> of <span id="total-pages">1</span></span>
                 <button onclick="nextPage()" id="next-btn" disabled>Next&nbsp; ▶</button>
-            </div>            
+            </div>
 
         </div>
 

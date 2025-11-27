@@ -222,7 +222,7 @@
       ],
       "h_crop": 0,
       "v_crop": 0,
-      "clahe": 2,
+      "clahe": 0,
       "zoom_in": 0
     },
     "NORMAL2-IM-0246-0001-0001_to_person9_bacteria_39": {

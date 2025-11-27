@@ -18,6 +18,22 @@ from typing import Dict, List, Optional
 from dlcv_p2_config import TRAIN_DIR, TEST_DIR
 
 
+# Metric display names
+METRIC_LABELS = {
+    'global_std': 'Global Contrast (std)',
+    'dynamic_range': 'Dynamic Range',
+    'hist_entropy': 'Histogram Entropy',
+    'kurtosis': 'Kurtosis',
+    'skewness': 'Skewness',
+    'local_std_mean': 'Local Std Mean',
+    'local_std_var': 'Local Std Variance',
+    'high_freq_energy': 'High Freq Energy'
+}
+
+# Metrics to include in range calculations
+METRIC_KEYS = list(METRIC_LABELS.keys())
+
+
 # Create FastAPI app
 app = FastAPI(title="DLCV Preprocessing Configuration")
 
@@ -76,6 +92,140 @@ def get_du_metrics(image_path):
     # Normalize paths to the same style used in DF_VIEW export
     normalized = image_path.replace("\\", "/")
     return DU_LOOKUP.get(normalized, {})
+
+
+def compute_metric_ranges(image_paths: List[str], dataset: str) -> Dict:
+    """
+    Compute min/max/outlier thresholds for each DU metric across given image paths.
+    
+    Args:
+        image_paths: List of image paths to analyze
+        dataset: 'train' or 'test'
+    
+    Returns:
+        Dictionary with metric statistics:
+        {
+            'metric_name': {
+                'min': float,
+                'max': float,
+                'q1': float,
+                'q3': float,
+                'outlier_low': float,  # Q1 - 1.5*IQR
+                'outlier_high': float, # Q3 + 1.5*IQR
+                'label': str,
+                'precision': int
+            }
+        }
+    """
+    # Normalize all paths
+    normalized_paths = [p.replace("\\", "/") for p in image_paths]
+    
+    # Collect metric values for each metric
+    metric_values = {key: [] for key in METRIC_KEYS}
+    
+    for path in normalized_paths:
+        du_data = DU_LOOKUP.get(path, {})
+        if du_data:
+            for key in METRIC_KEYS:
+                if key in du_data:
+                    metric_values[key].append(float(du_data[key]))
+    
+    # Compute statistics for each metric
+    ranges = {}
+    for key in METRIC_KEYS:
+        values = metric_values[key]
+        
+        if not values:
+            # No data available for this metric
+            ranges[key] = {
+                'min': 0.0,
+                'max': 1.0,
+                'q1': 0.0,
+                'q3': 1.0,
+                'outlier_low': 0.0,
+                'outlier_high': 1.0,
+                'label': METRIC_LABELS[key],
+                'precision': 2
+            }
+            continue
+        
+        values_array = np.array(values)
+        
+        # Compute percentiles
+        min_val = float(np.min(values_array))
+        max_val = float(np.max(values_array))
+        q1 = float(np.percentile(values_array, 25))
+        q3 = float(np.percentile(values_array, 75))
+        iqr = q3 - q1
+        
+        # Outlier thresholds (IQR method)
+        outlier_low = q1 - 1.5 * iqr
+        outlier_high = q3 + 1.5 * iqr
+        
+        # Determine precision based on value range
+        value_range = max_val - min_val
+        if value_range < 1:
+            precision = 4
+        elif value_range < 10:
+            precision = 3
+        else:
+            precision = 2
+        
+        ranges[key] = {
+            'min': round(min_val, precision),
+            'max': round(max_val, precision),
+            'q1': round(q1, precision),
+            'q3': round(q3, precision),
+            'outlier_low': round(outlier_low, precision),
+            'outlier_high': round(outlier_high, precision),
+            'label': METRIC_LABELS[key],
+            'precision': precision
+        }
+    
+    return ranges
+
+
+def apply_du_filters(image_paths: List[str], du_filters: Dict) -> List[str]:
+    """
+    Filter image paths based on DU metric ranges.
+    
+    Args:
+        image_paths: List of image paths to filter
+        du_filters: Dictionary of filters {metric_name: [min_val, max_val], ...}
+    
+    Returns:
+        Filtered list of image paths
+    """
+    if not du_filters:
+        return image_paths
+    
+    filtered_paths = []
+    
+    for path in image_paths:
+        normalized_path = path.replace("\\", "/")
+        du_data = DU_LOOKUP.get(normalized_path, {})
+        
+        # If no DU data, skip this image
+        if not du_data:
+            continue
+        
+        # Check all filters (AND condition)
+        passes_all = True
+        for metric_name, (min_val, max_val) in du_filters.items():
+            if metric_name not in du_data:
+                passes_all = False
+                break
+            
+            metric_val = float(du_data[metric_name])
+            if not (min_val <= metric_val <= max_val):
+                passes_all = False
+                break
+        
+        if passes_all:
+            filtered_paths.append(path)
+    
+    return filtered_paths
+
 
 def build_dimension_cache(dataset: str = 'train'):
     """
@@ -272,6 +422,64 @@ async def disconnect(sid):
 
 
 @sio.event
+async def get_metric_ranges(sid, data):
+    """
+    Get min/max/outlier ranges for DU metrics for a specific dimension.
+    
+    Args:
+        data: dict with 'config_file', 'dimension', 'dataset'
+    
+    Returns:
+        Emits 'metric_ranges' with ranges for all metrics
+    """
+    config_file = data.get('config_file')
+    dimension = data.get('dimension')
+    dataset = data.get('dataset', 'train')
+    
+    if not config_file:
+        await sio.emit('error', {'message': 'No config file specified'}, room=sid)
+        return
+    
+    if not dimension:
+        await sio.emit('error', {'message': 'No dimension specified'}, room=sid)
+        return
+    
+    # Load the specified config file
+    config_path = os.path.join("static", config_file)
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except Exception as e:
+        await sio.emit('error', {'message': f'Failed to load config: {str(e)}'}, room=sid)
+        return
+    
+    if 'dimensions' not in config or dimension not in config['dimensions']:
+        await sio.emit('error', {'message': f'Dimension {dimension} not found in config'}, room=sid)
+        return
+    
+    dimension_config = config['dimensions'][dimension]
+    all_image_paths = dimension_config.get('image_paths', [])
+    
+    if not all_image_paths:
+        await sio.emit('error', {'message': f'No image paths for dimension {dimension}'}, room=sid)
+        return
+    
+    # Filter by dataset
+    dataset_dir = 'chest_xray/train' if dataset == 'train' else 'chest_xray/test'
+    dataset_paths = [p for p in all_image_paths if dataset_dir in p]
+    
+    # Compute ranges
+    ranges = compute_metric_ranges(dataset_paths, dataset)
+    
+    await sio.emit('metric_ranges', {
+        'dimension': dimension,
+        'dataset': dataset,
+        'ranges': ranges
+    }, room=sid)
+
+
+@sio.event
 async def load_config(sid, filename=None):
     """Load configuration from JSON file"""
     if filename:
@@ -320,13 +528,14 @@ async def get_dimension_images(sid, data):
     
     Args:
         data: dict with 'config_file', 'dimension', 'dataset', 'class_filter',
-        'params', 'offset', and 'limit'
+        'params', 'du_filters', 'offset', and 'limit'
     """
     config_file = data.get('config_file')
     dimension = data.get('dimension')
     dataset = data.get('dataset', 'train')
     class_filter = data.get('class_filter', 'all')
     params = data.get('params', {})
+    du_filters = data.get('du_filters', {})
     offset = data.get('offset', 0)
     limit = data.get('limit', 18)
     
@@ -363,9 +572,22 @@ async def get_dimension_images(sid, data):
     dataset_dir = 'chest_xray/train' if dataset == 'train' else 'chest_xray/test'
     all_image_paths = [p for p in all_image_paths if dataset_dir in p]
     
+    # Store total count before class filtering
+    total_before_class_filter = len(all_image_paths)
+    
     # Filter by class if needed
     if class_filter != 'all':
         all_image_paths = [p for p in all_image_paths if f'/{class_filter}/' in p]
+    
+    # Store total count before DU filtering
+    total_before_du_filter = len(all_image_paths)
+    
+    # Apply DU metric filters
+    if du_filters:
+        all_image_paths = apply_du_filters(all_image_paths, du_filters)
+    
+    # Store total count after all filtering
+    total_filtered = len(all_image_paths)
     
     # Apply pagination
     paginated_paths = all_image_paths[offset:offset + limit]
@@ -404,7 +626,8 @@ async def get_dimension_images(sid, data):
         'dimension': dimension,
         'dataset': dataset,
         'count': len(images_data),
-        'total_available': len(all_image_paths)
+        'total_available': total_before_du_filter,
+        'filtered_count': total_filtered
     }, room=sid)
     
     # Send the images one by one
