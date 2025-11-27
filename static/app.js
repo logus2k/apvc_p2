@@ -686,6 +686,7 @@ function createAugmentationSliders() {
     panel.innerHTML = "";
 
     // Augmentation parameters configuration
+    /*
     const augSliderConfigs = [
         { key: 'rotation', label: 'Rotation (degrees)', min: 0, max: 20, step: 1, precision: 0 },
         { key: 'brightness_var', label: 'Brightness Variation', min: 0, max: 0.5, step: 0.01, precision: 2 },
@@ -695,6 +696,17 @@ function createAugmentationSliders() {
         { key: 'contrast_var', label: 'Contrast Variation', min: 0, max: 0.5, step: 0.01, precision: 2 },
         { key: 'gaussian_noise', label: 'Gaussian Noise', min: 0, max: 0.1, step: 0.001, precision: 3 }
     ];
+    */
+
+    const augSliderConfigs = [
+        { key: 'rotation', label: 'Rotation (degrees)', min: 0, max: 15, step: 1, precision: 0 },
+        { key: 'brightness_var', label: 'Brightness Variation', min: 0, max: 0.3, step: 0.01, precision: 2 },
+        { key: 'zoom', label: 'Zoom Variation', min: 0, max: 0.2, step: 0.01, precision: 2 },
+        { key: 'width_shift', label: 'Width Shift', min: 0, max: 0.2, step: 0.01, precision: 2 },
+        { key: 'height_shift', label: 'Height Shift', min: 0, max: 0.2, step: 0.01, precision: 2 },
+        { key: 'contrast_var', label: 'Contrast Variation', min: 0, max: 0.3, step: 0.01, precision: 2 },
+        { key: 'gaussian_noise', label: 'Gaussian Noise', min: 0, max: 0.05, step: 0.001, precision: 3 }
+    ];    
 
     // Create sliders
     augSliderConfigs.forEach(config => {
