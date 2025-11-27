@@ -16,6 +16,21 @@ let metricRanges = {};  // Stores min/max/outlier data from server
 let duFilters = {};     // Active filters: {metric: [min, max]}
 let duSlidersInitialized = false;
 
+// Augmentation parameters and state
+let augParams = {
+    rotation: 0,
+    brightness_var: 0,
+    zoom: 0,
+    width_shift: 0,
+    height_shift: 0,
+    contrast_var: 0,
+    gaussian_noise: 0,
+    horizontal_flip: false,
+    vertical_flip: false
+};
+let augSlidersInitialized = false;
+let isAugmentationActive = false;
+
 socket.on('connect', () => { console.log('Connected'); showStatus('Connected to server', false); loadAvailableConfigs(); });
 
 socket.on('disconnect', () => showStatus('Disconnected', true));
@@ -30,7 +45,7 @@ socket.on('config_loaded', (c) => {
     isLoadingConfig = false;
     const dataset = document.getElementById('dataset').value;
     populateDimensionList(c, dataset);
-    showStatus('Config loaded', false);
+    showStatus('Configuration loaded successfully', false);
     console.log('=== CONFIG_LOADED COMPLETE ===');
 });
 
@@ -51,6 +66,11 @@ socket.on('images_loaded', (d) => {
     console.log('images_loaded event:', d);
     totalImages = d.total_available || 0;
     filteredImages = d.filtered_count || totalImages;
+    
+    // Store augmentation active state from server
+    if (d.aug_active !== undefined) {
+        isAugmentationActive = d.aug_active;
+    }
     
     document.getElementById('info-box').style.display = 'block';
     
@@ -75,8 +95,8 @@ socket.on('images_loaded', (d) => {
 socket.on('image_data', (d) => {
     const index = d.index;
     
-    // Render image directly
-    displayImage(index, d.data, d.filename, d.du || {});
+    // Render image directly with augmentation flag
+    displayImage(index, d.data, d.filename, d.du || {}, d.is_augmented || false);
     
     window.receivedImageCount++;
     
@@ -271,6 +291,20 @@ function onDimensionChange() {
         duFilters = {};
         duSlidersInitialized = false;
         
+        // Reset augmentation parameters
+        augParams = {
+            rotation: 0,
+            brightness_var: 0,
+            zoom: 0,
+            width_shift: 0,
+            height_shift: 0,
+            contrast_var: 0,
+            gaussian_noise: 0,
+            horizontal_flip: false,
+            vertical_flip: false
+        };
+        isAugmentationActive = false;
+        
         console.log('About to load dimension params');
         loadDimensionParams(d);
         
@@ -284,6 +318,12 @@ function onDimensionChange() {
             dimension: d,
             dataset: dataset
         });
+        
+        // Initialize augmentation sliders once
+        if (!augSlidersInitialized) {
+            createAugmentationSliders();
+            augSlidersInitialized = true;
+        }
         
         console.log('About to ensure grid and load images');
         ensureGridExists();
@@ -343,6 +383,8 @@ function loadImagesPage() {
         const cell = document.getElementById(`cell-${i}`);
         if (cell) {
             cell.innerHTML = '<div class="filename"></div><div class="image-wrapper"><span class="placeholder">Loading...</span></div>';
+            // Remove augmented class if present
+            cell.classList.remove('augmented');
         }
     }
 
@@ -350,7 +392,11 @@ function loadImagesPage() {
     const classFilter = document.getElementById('class-filter').value;
     const configFile = document.getElementById('config-file').value;
     
-    console.log('Requesting images: page', currentPage, 'offset', currentPage * IMAGES_PER_PAGE, 'params', p, 'class', classFilter, 'du_filters', duFilters);
+    // Calculate offset based on augmentation mode
+    // When augmentation is active, we show 3 originals per page (not 18)
+    const offset = isAugmentationActive ? (currentPage * 3) : (currentPage * IMAGES_PER_PAGE);
+    
+    console.log('Requesting images: page', currentPage, 'offset', offset, 'params', p, 'class', classFilter, 'du_filters', duFilters, 'aug_params', augParams, 'aug_active', isAugmentationActive);
     
     socket.emit('get_dimension_images', {
         config_file: configFile,
@@ -359,7 +405,8 @@ function loadImagesPage() {
         class_filter: classFilter,
         params: p,
         du_filters: duFilters,
-        offset: currentPage * IMAGES_PER_PAGE,
+        aug_params: augParams,
+        offset: offset,
         limit: IMAGES_PER_PAGE
     });
     
@@ -370,7 +417,7 @@ function getCurrentParams() { return { h_crop: parseFloat(document.getElementByI
 
 function updatePreview() { if (!currentDimension) { showStatus('Load images first', true); return; } loadImagesPage(); }
 
-function displayImage(i, d, filename, du = {}) {
+function displayImage(i, d, filename, du = {}, is_augmented = false) {
 
     const c = document.getElementById(`cell-${i}`);
 
@@ -400,6 +447,22 @@ function displayImage(i, d, filename, du = {}) {
         }
     }
 
+    // Apply augmentation styling
+    if (is_augmented) {
+        c.classList.add('augmented');
+    } else {
+        c.classList.remove('augmented');
+    }
+
+    // Add or update status label
+    let statusLabel = c.querySelector('.status-label');
+    if (!statusLabel) {
+        statusLabel = document.createElement('div');
+        statusLabel.className = 'status-label';
+        c.appendChild(statusLabel);
+    }
+    statusLabel.textContent = is_augmented ? 'Augmented' : 'Original';
+
     // Attach DU metrics to DOM element for later use
     c.dataset.du = JSON.stringify(du);
 
@@ -411,14 +474,24 @@ function saveToConfig() {
     const configFile = document.getElementById('config-file').value;
     if (!d || !currentConfig) { showStatus('Select dimension', true); return; }
     if (!configFile) { showStatus('No config file selected', true); return; }
+    
     const p = getCurrentParams();
-    currentConfig.dimensions[d] = { ...currentConfig.dimensions[d], ...p };
+    
+    // Merge preprocessing params and augmentation params
+    currentConfig.dimensions[d] = { 
+        ...currentConfig.dimensions[d], 
+        ...p,
+        augmentation: { ...augParams }
+    };
+    
     socket.emit('save_config_data', { filename: configFile, config: currentConfig });
 }
 
 function updatePaginationButtons() {
-    const tp = Math.ceil(filteredImages / IMAGES_PER_PAGE) || 1;
-    console.log('updatePaginationButtons: currentPage=', currentPage, 'filteredImages=', filteredImages, 'totalPages=', tp);
+    // When augmentation is active, we show 3 originals per page (not 18)
+    const imagesPerPage = isAugmentationActive ? 3 : IMAGES_PER_PAGE;
+    const tp = Math.ceil(filteredImages / imagesPerPage) || 1;
+    console.log('updatePaginationButtons: currentPage=', currentPage, 'filteredImages=', filteredImages, 'imagesPerPage=', imagesPerPage, 'totalPages=', tp, 'augActive=', isAugmentationActive);
     document.getElementById('prev-btn').disabled = currentPage === 0;
     document.getElementById('next-btn').disabled = currentPage >= tp - 1 || tp <= 1;
     document.getElementById('page-input').value = currentPage + 1;
@@ -435,8 +508,9 @@ function previousPage() {
 }
 
 function nextPage() { 
-    console.log('nextPage clicked'); 
-    const tp = Math.ceil(filteredImages / IMAGES_PER_PAGE); 
+    console.log('nextPage clicked');
+    const imagesPerPage = isAugmentationActive ? 3 : IMAGES_PER_PAGE;
+    const tp = Math.ceil(filteredImages / imagesPerPage); 
     if (currentPage < tp - 1) { 
         currentPage++; 
         loadImagesPage(); 
@@ -446,7 +520,8 @@ function nextPage() {
 function goToPage() {
     const pageInput = document.getElementById('page-input');
     const targetPage = parseInt(pageInput.value) - 1;
-    const tp = Math.ceil(filteredImages / IMAGES_PER_PAGE);
+    const imagesPerPage = isAugmentationActive ? 3 : IMAGES_PER_PAGE;
+    const tp = Math.ceil(filteredImages / imagesPerPage);
 
     if (isNaN(targetPage) || targetPage < 0 || targetPage >= tp) {
         pageInput.value = currentPage + 1;
@@ -484,7 +559,7 @@ function createDUSliders() {
         const valueDisplay = document.createElement("div");
         valueDisplay.style.fontSize = "11px";
         valueDisplay.style.color = "#333";
-        valueDisplay.style.marginTop = "4px";
+        valueDisplay.style.marginTop = "6px";
         valueDisplay.style.textAlign = "center";
         valueDisplay.textContent = `${config.min.toFixed(config.precision)} - ${config.max.toFixed(config.precision)}`;
 
@@ -562,6 +637,204 @@ function createDUSliders() {
             currentPage = 0;
             loadImagesPage();
         });
+    });
+    
+    // Add Reset button for DU metrics (inline, no new line)
+    const resetDUButton = document.createElement("button");
+    resetDUButton.textContent = "Reset";
+    resetDUButton.style.padding = "6px 12px";
+    resetDUButton.style.fontSize = "13px";
+    resetDUButton.style.marginTop = "20px";
+    resetDUButton.onclick = () => {
+        // Reset all DU sliders to full range
+        Object.entries(metricRanges).forEach(([metricKey, config]) => {
+            const sliderDiv = document.getElementById(`slider-${metricKey}`);
+            if (sliderDiv && sliderDiv.noUiSlider) {
+                sliderDiv.noUiSlider.set([config.min, config.max]);
+            }
+        });
+        
+        // Clear all filters
+        duFilters = {};
+        
+        // Reload
+        currentPage = 0;
+        loadImagesPage();
+    };
+    
+    panel.appendChild(resetDUButton);
+}
+
+// Check if augmentation is active
+function checkAugmentationActive() {
+    return (
+        augParams.rotation !== 0 ||
+        augParams.brightness_var !== 0 ||
+        augParams.zoom !== 0 ||
+        augParams.width_shift !== 0 ||
+        augParams.height_shift !== 0 ||
+        augParams.contrast_var !== 0 ||
+        augParams.gaussian_noise !== 0 ||
+        augParams.horizontal_flip === true ||
+        augParams.vertical_flip === true
+    );
+}
+
+// Create Augmentation Sliders
+function createAugmentationSliders() {
+    const panel = document.getElementById("aug-slider-panel");
+    panel.innerHTML = "";
+
+    // Augmentation parameters configuration
+    const augSliderConfigs = [
+        { key: 'rotation', label: 'Rotation (degrees)', min: 0, max: 20, step: 1, precision: 0 },
+        { key: 'brightness_var', label: 'Brightness Variation', min: 0, max: 0.5, step: 0.01, precision: 2 },
+        { key: 'zoom', label: 'Zoom Variation', min: 0, max: 0.3, step: 0.01, precision: 2 },
+        { key: 'width_shift', label: 'Width Shift', min: 0, max: 0.3, step: 0.01, precision: 2 },
+        { key: 'height_shift', label: 'Height Shift', min: 0, max: 0.3, step: 0.01, precision: 2 },
+        { key: 'contrast_var', label: 'Contrast Variation', min: 0, max: 0.5, step: 0.01, precision: 2 },
+        { key: 'gaussian_noise', label: 'Gaussian Noise', min: 0, max: 0.1, step: 0.001, precision: 3 }
+    ];
+
+    // Create sliders
+    augSliderConfigs.forEach(config => {
+        const container = document.createElement("div");
+        container.className = "aug-slider-container";
+        container.style.width = "160px";
+        // container.style.marginBottom = "15px";
+
+        const label = document.createElement("div");
+        label.className = "du-slider-label";
+        label.textContent = config.label;
+        label.style.marginBottom = "8px";
+
+        const sliderDiv = document.createElement("div");
+        sliderDiv.className = "du-slider";
+        sliderDiv.id = `aug-slider-${config.key}`;
+
+        const valueDisplay = document.createElement("div");
+        valueDisplay.style.fontSize = "11px";
+        valueDisplay.style.color = "#666";
+        valueDisplay.style.textAlign = "center";
+        valueDisplay.textContent = `${config.min.toFixed(config.precision)}`;
+
+        container.appendChild(label);
+        container.appendChild(sliderDiv);
+        container.appendChild(valueDisplay);
+        panel.appendChild(container);
+
+        // Initialize noUiSlider (single knob)
+        noUiSlider.create(sliderDiv, {
+            start: [config.min],
+            connect: [true, false],
+            range: {
+                'min': config.min,
+                'max': config.max
+            },
+            step: config.step,
+            format: {
+                to: (value) => value.toFixed(config.precision),
+                from: (value) => parseFloat(value)
+            }
+        });
+
+        // Handle slider changes
+        sliderDiv.noUiSlider.on('change', (values) => {
+            const val = parseFloat(values[0]);
+            valueDisplay.textContent = val.toFixed(config.precision);
+            
+            // Update augParams
+            augParams[config.key] = val;
+            
+            // Check if augmentation is active
+            isAugmentationActive = checkAugmentationActive();
+            
+            // Reset to first page and reload
+            currentPage = 0;
+            loadImagesPage();
+        });
+    });
+
+    // Add checkboxes for flips (horizontal layout)
+    const flipContainer = document.createElement("div");
+    flipContainer.style.display = "flex";
+    flipContainer.style.flexDirection = "row";
+    flipContainer.style.gap = "20px";
+    flipContainer.style.alignItems = "center";
+    flipContainer.style.marginTop = "5px";
+
+    // Horizontal flip
+    const hFlipDiv = document.createElement("div");
+    hFlipDiv.className = "aug-checkbox-container";
+    const hFlipCheckbox = document.createElement("input");
+    hFlipCheckbox.type = "checkbox";
+    hFlipCheckbox.id = "aug-horizontal-flip";
+    hFlipCheckbox.checked = false;
+    const hFlipLabel = document.createElement("label");
+    hFlipLabel.htmlFor = "aug-horizontal-flip";
+    hFlipLabel.textContent = "Horizontal Flip";
+    hFlipDiv.appendChild(hFlipCheckbox);
+    hFlipDiv.appendChild(hFlipLabel);
+
+    // Vertical flip
+    const vFlipDiv = document.createElement("div");
+    vFlipDiv.className = "aug-checkbox-container";
+    const vFlipCheckbox = document.createElement("input");
+    vFlipCheckbox.type = "checkbox";
+    vFlipCheckbox.id = "aug-vertical-flip";
+    vFlipCheckbox.checked = false;
+    const vFlipLabel = document.createElement("label");
+    vFlipLabel.htmlFor = "aug-vertical-flip";
+    vFlipLabel.textContent = "Vertical Flip";
+    vFlipDiv.appendChild(vFlipCheckbox);
+    vFlipDiv.appendChild(vFlipLabel);
+
+    // Reset button for augmentation
+    const resetAugButton = document.createElement("button");
+    resetAugButton.textContent = "Reset";
+    resetAugButton.style.marginLeft = "20px";
+    resetAugButton.style.padding = "6px 12px";
+    resetAugButton.style.fontSize = "13px";
+    resetAugButton.onclick = () => {
+        // Reset all augmentation sliders
+        augSliderConfigs.forEach(config => {
+            const sliderDiv = document.getElementById(`aug-slider-${config.key}`);
+            if (sliderDiv && sliderDiv.noUiSlider) {
+                sliderDiv.noUiSlider.set(config.min);
+            }
+            augParams[config.key] = config.min;
+        });
+        
+        // Reset checkboxes
+        hFlipCheckbox.checked = false;
+        vFlipCheckbox.checked = false;
+        augParams.horizontal_flip = false;
+        augParams.vertical_flip = false;
+        
+        // Reload
+        isAugmentationActive = false;
+        currentPage = 0;
+        loadImagesPage();
+    };
+
+    flipContainer.appendChild(hFlipDiv);
+    flipContainer.appendChild(vFlipDiv);
+    flipContainer.appendChild(resetAugButton);
+    panel.appendChild(flipContainer);
+
+    // Handle checkbox changes
+    hFlipCheckbox.addEventListener('change', () => {
+        augParams.horizontal_flip = hFlipCheckbox.checked;
+        isAugmentationActive = checkAugmentationActive();
+        currentPage = 0;
+        loadImagesPage();
+    });
+
+    vFlipCheckbox.addEventListener('change', () => {
+        augParams.vertical_flip = vFlipCheckbox.checked;
+        isAugmentationActive = checkAugmentationActive();
+        currentPage = 0;
+        loadImagesPage();
     });
 }
 

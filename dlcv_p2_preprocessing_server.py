@@ -17,6 +17,15 @@ from typing import Dict, List, Optional
 
 from dlcv_p2_config import TRAIN_DIR, TEST_DIR
 
+# TensorFlow imports for augmentation
+try:
+    from tensorflow.keras.preprocessing.image import ImageDataGenerator
+    import tensorflow as tf
+    AUGMENTATION_AVAILABLE = True
+except ImportError:
+    print("WARNING: TensorFlow not available. Augmentation features disabled.")
+    AUGMENTATION_AVAILABLE = False
+
 
 # Metric display names
 METRIC_LABELS = {
@@ -392,6 +401,77 @@ def apply_preprocessing(image: np.ndarray, params: dict) -> np.ndarray:
     return result
 
 
+def apply_augmentation(image: np.ndarray, aug_params: dict) -> np.ndarray:
+    """
+    Apply Keras-compatible data augmentation to an image.
+    
+    Args:
+        image: Input grayscale image (already preprocessed)
+        aug_params: Augmentation parameters
+    
+    Returns:
+        Augmented image
+    """
+    if not AUGMENTATION_AVAILABLE:
+        return image
+    
+    if not aug_params or all(v == 0 or v == False for v in aug_params.values()):
+        return image
+    
+    # Extract augmentation parameters with defaults
+    rotation = float(aug_params.get('rotation', 0))
+    brightness_var = float(aug_params.get('brightness_var', 0))
+    zoom = float(aug_params.get('zoom', 0))
+    width_shift = float(aug_params.get('width_shift', 0))
+    height_shift = float(aug_params.get('height_shift', 0))
+    contrast_var = float(aug_params.get('contrast_var', 0))
+    horizontal_flip = bool(aug_params.get('horizontal_flip', False))
+    vertical_flip = bool(aug_params.get('vertical_flip', False))
+    
+    # Build brightness_range from variation parameter
+    brightness_range = None
+    if brightness_var > 0:
+        brightness_range = (max(0.1, 1.0 - brightness_var), 1.0 + brightness_var)
+    
+    # Create ImageDataGenerator with parameters
+    # NOTE: Keras width_shift_range shifts VERTICALLY, height_shift_range shifts HORIZONTALLY
+    # This is counter-intuitive but confirmed by testing
+    datagen = ImageDataGenerator(
+        rotation_range=rotation,
+        width_shift_range=height_shift,  # Swapped: height_shift controls horizontal movement
+        height_shift_range=width_shift,  # Swapped: width_shift controls vertical movement
+        brightness_range=brightness_range,
+        zoom_range=zoom if zoom > 0 else 0,
+        horizontal_flip=horizontal_flip,
+        vertical_flip=vertical_flip,
+        fill_mode='constant',
+        cval=0
+    )
+    
+    # Prepare image for Keras (add batch and channel dimensions)
+    img_expanded = np.expand_dims(image, axis=0)  # Add batch dimension
+    img_expanded = np.expand_dims(img_expanded, axis=-1)  # Add channel dimension
+    
+    # Generate one augmented version
+    aug_iter = datagen.flow(img_expanded, batch_size=1, shuffle=False)
+    augmented = next(aug_iter)[0, :, :, 0]
+    
+    # Apply contrast adjustment if specified (Keras ImageDataGenerator doesn't have this)
+    if contrast_var > 0:
+        # Simple contrast adjustment: scale pixel values around mean
+        mean_val = np.mean(augmented)
+        contrast_factor = 1.0 + np.random.uniform(-contrast_var, contrast_var)
+        augmented = np.clip((augmented - mean_val) * contrast_factor + mean_val, 0, 255)
+    
+    # Apply Gaussian noise if specified
+    gaussian_noise = float(aug_params.get('gaussian_noise', 0))
+    if gaussian_noise > 0:
+        noise = np.random.normal(0, gaussian_noise * 255, augmented.shape)
+        augmented = np.clip(augmented + noise, 0, 255)
+    
+    return augmented.astype(np.uint8)
+
+
 # Socket.IO event handlers
 
 @sio.event
@@ -530,7 +610,7 @@ async def get_dimension_images(sid, data):
     
     Args:
         data: dict with 'config_file', 'dimension', 'dataset', 'class_filter',
-        'params', 'du_filters', 'offset', and 'limit'
+        'params', 'du_filters', 'aug_params', 'offset', and 'limit'
     """
     config_file = data.get('config_file')
     dimension = data.get('dimension')
@@ -538,6 +618,7 @@ async def get_dimension_images(sid, data):
     class_filter = data.get('class_filter', 'all')
     params = data.get('params', {})
     du_filters = data.get('du_filters', {})
+    aug_params = data.get('aug_params', {})
     offset = data.get('offset', 0)
     limit = data.get('limit', 18)
     
@@ -591,13 +672,40 @@ async def get_dimension_images(sid, data):
     # Store total count after all filtering
     total_filtered = len(all_image_paths)
     
-    # Apply pagination
-    paginated_paths = all_image_paths[offset:offset + limit]
+    # Check if augmentation is active
+    aug_active = False
+    if aug_params:
+        aug_active = any(
+            (k in ['horizontal_flip', 'vertical_flip'] and v) or 
+            (k not in ['horizontal_flip', 'vertical_flip'] and v != 0)
+            for k, v in aug_params.items()
+        )
+    
+    # If augmentation is active, adjust pagination
+    # Show 3 originals + 5 variations each = 18 cells
+    if aug_active:
+        num_originals = 3
+        paginated_paths = all_image_paths[offset:offset + num_originals]
+    else:
+        paginated_paths = all_image_paths[offset:offset + limit]
+    
+    # Handle zero images edge case
+    if len(paginated_paths) == 0:
+        await sio.emit('images_loaded', {
+            'dimension': dimension,
+            'dataset': dataset,
+            'count': 0,
+            'total_available': total_before_du_filter,
+            'filtered_count': total_filtered,
+            'aug_active': aug_active
+        }, room=sid)
+        return
     
     # Load and process images
     images_data = []
+    cell_idx = 0
     
-    for idx, path in enumerate(paginated_paths):
+    for path in paginated_paths:
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
@@ -605,23 +713,52 @@ async def get_dimension_images(sid, data):
         # Apply preprocessing
         processed = apply_preprocessing(img, params)
         
-        # Encode as PNG
-        success, buffer = cv2.imencode('.png', processed)
-        if not success:
-            continue
-
         # Retrieve DU metrics for this image
         normalized_path = path.replace("\\", "/")
         du_info = get_du_metrics(normalized_path)
-
-        # Include DU metrics in the payload
-        images_data.append({
-            'index': idx,
-            'data': buffer.tobytes(),
-            'filename': os.path.basename(path),
-            'path': normalized_path,       # helpful for the frontend
-            'du': du_info                  # DU metrics added here
-        })
+        filename = os.path.basename(path)
+        
+        if aug_active:
+            # Send original first
+            success, buffer = cv2.imencode('.png', processed)
+            if success:
+                images_data.append({
+                    'index': cell_idx,
+                    'data': buffer.tobytes(),
+                    'filename': filename,
+                    'path': normalized_path,
+                    'du': du_info,
+                    'is_augmented': False
+                })
+                cell_idx += 1
+            
+            # Generate 5 augmented variations
+            for var_idx in range(5):
+                augmented = apply_augmentation(processed, aug_params)
+                success, buffer = cv2.imencode('.png', augmented)
+                if success:
+                    images_data.append({
+                        'index': cell_idx,
+                        'data': buffer.tobytes(),
+                        'filename': filename,
+                        'path': normalized_path,
+                        'du': du_info,
+                        'is_augmented': True
+                    })
+                    cell_idx += 1
+        else:
+            # No augmentation - send original only
+            success, buffer = cv2.imencode('.png', processed)
+            if success:
+                images_data.append({
+                    'index': cell_idx,
+                    'data': buffer.tobytes(),
+                    'filename': filename,
+                    'path': normalized_path,
+                    'du': du_info,
+                    'is_augmented': False
+                })
+                cell_idx += 1
     
     # Send info about how many images were loaded
     await sio.emit('images_loaded', {
@@ -629,7 +766,8 @@ async def get_dimension_images(sid, data):
         'dataset': dataset,
         'count': len(images_data),
         'total_available': total_before_du_filter,
-        'filtered_count': total_filtered
+        'filtered_count': total_filtered,
+        'aug_active': aug_active
     }, room=sid)
     
     # Send the images one by one
