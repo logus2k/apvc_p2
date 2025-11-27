@@ -45,7 +45,7 @@
 
             <div class="pagination-controls">
                 <button onclick="previousPage()" id="prev-btn" disabled>◀ &nbsp;Previous</button>
-                <span>Page <input type="number" id="page-input" min="1" value="1" style="width: 65px; text-align: right; height: 33px;" onchange="goToPage()"> of <span id="total-pages">1</span></span>
+                <span>Page&nbsp; <input type="number" id="page-input" min="1" value="1" style="width: 65px; text-align: right; height: 30px;" onchange="goToPage()"> &nbsp;of&nbsp; <span id="total-pages">1</span></span>
                 <button onclick="nextPage()" id="next-btn" disabled>Next&nbsp; ▶</button>
             </div>
 
@@ -55,7 +55,7 @@
             <div class="image-grid" id="image-grid"></div>
         </div>
 
-        <div id="loading" class="loading" style="display:none;">Loading images...</div>
+        <div id="loading" class="status" style="display:none;">Loading images</div>
         <div class="status" id="status"></div>
 
     </div>

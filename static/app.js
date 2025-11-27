@@ -461,7 +461,7 @@ function displayImage(i, d, filename, du = {}, is_augmented = false) {
         statusLabel.className = 'status-label';
         c.appendChild(statusLabel);
     }
-    statusLabel.textContent = is_augmented ? 'Augmented' : 'Original';
+    statusLabel.textContent = is_augmented ? 'AUGMENTED' : 'ORIGINAL';
 
     // Attach DU metrics to DOM element for later use
     c.dataset.du = JSON.stringify(du);

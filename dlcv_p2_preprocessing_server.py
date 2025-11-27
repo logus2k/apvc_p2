@@ -17,15 +17,15 @@ from typing import Dict, List, Optional
 
 from dlcv_p2_config import TRAIN_DIR, TEST_DIR
 
-# TensorFlow imports for augmentation
-try:
-    from tensorflow.keras.preprocessing.image import ImageDataGenerator
-    import tensorflow as tf
-    AUGMENTATION_AVAILABLE = True
-except ImportError:
-    print("WARNING: TensorFlow not available. Augmentation features disabled.")
-    AUGMENTATION_AVAILABLE = False
+import tensorflow as tf
+from keras.layers import (
+    RandomRotation, RandomTranslation, RandomZoom, RandomFlip,
+    RandomBrightness, RandomContrast, GaussianNoise
+)
+from keras import Sequential
 
+
+AUGMENTATION_AVAILABLE = True
 
 # Metric display names
 METRIC_LABELS = {
@@ -403,7 +403,10 @@ def apply_preprocessing(image: np.ndarray, params: dict) -> np.ndarray:
 
 def apply_augmentation(image: np.ndarray, aug_params: dict) -> np.ndarray:
     """
-    Apply Keras-compatible data augmentation to an image.
+    Apply Keras-compatible data augmentation to an image using modern Keras Preprocessing Layers.
+    
+    This replaces the deprecated ImageDataGenerator and all custom NumPy/OpenCV post-processing
+    to ensure the augmentation is 100% Keras-native.
     
     Args:
         image: Input grayscale image (already preprocessed)
@@ -412,13 +415,15 @@ def apply_augmentation(image: np.ndarray, aug_params: dict) -> np.ndarray:
     Returns:
         Augmented image
     """
+    # Check if any augmentation is active
     if not AUGMENTATION_AVAILABLE:
         return image
+        
+    if not aug_params or all(v == 0 or v is False for k, v in aug_params.items() if k != 'gaussian_noise' or v == 0):
+        if aug_params.get('gaussian_noise', 0) == 0:
+            return image
     
-    if not aug_params or all(v == 0 or v == False for v in aug_params.values()):
-        return image
-    
-    # Extract augmentation parameters with defaults
+    # --- 1. Parameter Extraction ---
     rotation = float(aug_params.get('rotation', 0))
     brightness_var = float(aug_params.get('brightness_var', 0))
     zoom = float(aug_params.get('zoom', 0))
@@ -427,49 +432,96 @@ def apply_augmentation(image: np.ndarray, aug_params: dict) -> np.ndarray:
     contrast_var = float(aug_params.get('contrast_var', 0))
     horizontal_flip = bool(aug_params.get('horizontal_flip', False))
     vertical_flip = bool(aug_params.get('vertical_flip', False))
+    gaussian_noise = float(aug_params.get('gaussian_noise', 0))
+
+    # --- 2. Input/Output Setup ---
+    # Convert image (H, W) to Tensor (1, H, W, 1) and change dtype to float32
+    # FIX: Normalize input to [0, 1] for GaussianNoise/Brightness/Contrast layers
+    input_tensor = tf.convert_to_tensor(image / 255.0, dtype=tf.float32)
+    input_tensor = tf.expand_dims(input_tensor, axis=0)  # Add batch dimension
+    input_tensor = tf.expand_dims(input_tensor, axis=-1) # Add channel dimension (1 for grayscale)
     
-    # Build brightness_range from variation parameter
-    brightness_range = None
+    # --- 3. Build Keras Sequential Model (Dynamic Augmentation Pipeline) ---
+    aug_layers = []
+
+    # Random Rotations 
+    if rotation > 0:
+        # factor = rotation_range / 360.0, a fraction of 2*PI
+        factor = rotation / 360.0
+        aug_layers.append(RandomRotation(factor=factor, fill_mode='constant', fill_value=0.0))
+
+    # Random Translation/Shift (Replaces width_shift_range/height_shift_range)
+    if width_shift > 0 or height_shift > 0:
+        # PRESERVING OLD LOGIC SWAP:
+        # UI's width_shift (horizontal axis slider) controls vertical movement (height_factor).
+        # UI's height_shift (vertical axis slider) controls horizontal movement (width_factor).
+        height_factor = width_shift 
+        width_factor = height_shift
+
+        aug_layers.append(RandomTranslation(
+            height_factor=height_factor,
+            width_factor=width_factor,
+            fill_mode='constant',
+            fill_value=0.0
+        ))
+
+    # Random Zoom (Replaces zoom_range)
+    if zoom > 0:
+        # Use single factor for symmetric zoom
+        aug_layers.append(RandomZoom(height_factor=zoom, fill_mode='constant', fill_value=0.0))
+
+    # Random Flip (Replaces horizontal_flip/vertical_flip)
+    flip_mode = None
+    if horizontal_flip and vertical_flip:
+        flip_mode = 'horizontal_and_vertical'
+    elif horizontal_flip:
+        flip_mode = 'horizontal'
+    elif vertical_flip:
+        flip_mode = 'vertical'
+
+    if flip_mode:
+        aug_layers.append(RandomFlip(mode=flip_mode))
+
+    # Random Brightness (Replaces brightness_range)
     if brightness_var > 0:
-        brightness_range = (max(0.1, 1.0 - brightness_var), 1.0 + brightness_var)
+        # FIX: Change value_range to (0, 1) to match normalized input data
+        aug_layers.append(RandomBrightness(factor=brightness_var, value_range=(0, 1)))
+
+    # Random Contrast (Replaces custom NumPy contrast logic)
+    if contrast_var > 0:
+        # FIX: Change value_range to (0, 1) to match normalized input data
+        aug_layers.append(RandomContrast(factor=contrast_var, value_range=(0, 1)))
+
+    # Gaussian Noise (Replaces custom NumPy noise logic)
+    if gaussian_noise > 0:
+        # FIX: Use gaussian_noise directly as stddev, since input is normalized [0, 1].
+        # The layer requires stddev <= 1.0.
+        aug_layers.append(GaussianNoise(stddev=gaussian_noise))
+
+    # --- 4. Execute Augmentation ---
+    if not aug_layers:
+        return image
+        
+    augmentation_model = Sequential(aug_layers)
     
-    # Create ImageDataGenerator with parameters
-    # NOTE: Keras width_shift_range shifts VERTICALLY, height_shift_range shifts HORIZONTALLY
-    # This is counter-intuitive but confirmed by testing
-    datagen = ImageDataGenerator(
-        rotation_range=rotation,
-        width_shift_range=height_shift,  # Swapped: height_shift controls horizontal movement
-        height_shift_range=width_shift,  # Swapped: width_shift controls vertical movement
-        brightness_range=brightness_range,
-        zoom_range=zoom if zoom > 0 else 0,
-        horizontal_flip=horizontal_flip,
-        vertical_flip=vertical_flip,
-        fill_mode='constant',
-        cval=0
+    # Call the model. training=True ensures randomness is applied.
+    augmented_tensor = augmentation_model(input_tensor, training=True)
+
+    # --- 5. Output Conversion ---
+    # Remove batch and channel dimensions (1, H, W, 1) -> (H, W)
+    augmented = tf.squeeze(augmented_tensor, axis=[0, 3])
+    
+    # FIX: Scale back to 0-255 range before clipping and final cast
+    augmented_scaled = augmented * 255.0
+
+    # Clip values to 0-255 range and cast to uint8.
+    final_tensor = tf.cast(
+        tf.clip_by_value(augmented_scaled, 0.0, 255.0), 
+        tf.uint8
     )
     
-    # Prepare image for Keras (add batch and channel dimensions)
-    img_expanded = np.expand_dims(image, axis=0)  # Add batch dimension
-    img_expanded = np.expand_dims(img_expanded, axis=-1)  # Add channel dimension
-    
-    # Generate one augmented version
-    aug_iter = datagen.flow(img_expanded, batch_size=1, shuffle=False)
-    augmented = next(aug_iter)[0, :, :, 0]
-    
-    # Apply contrast adjustment if specified (Keras ImageDataGenerator doesn't have this)
-    if contrast_var > 0:
-        # Simple contrast adjustment: scale pixel values around mean
-        mean_val = np.mean(augmented)
-        contrast_factor = 1.0 + np.random.uniform(-contrast_var, contrast_var)
-        augmented = np.clip((augmented - mean_val) * contrast_factor + mean_val, 0, 255)
-    
-    # Apply Gaussian noise if specified
-    gaussian_noise = float(aug_params.get('gaussian_noise', 0))
-    if gaussian_noise > 0:
-        noise = np.random.normal(0, gaussian_noise * 255, augmented.shape)
-        augmented = np.clip(augmented + noise, 0, 255)
-    
-    return augmented.astype(np.uint8)
+    # Convert to NumPy array. We suppress the non-issue Pylance warning here.
+    return final_tensor.numpy() # type: ignore
 
 
 # Socket.IO event handlers
@@ -675,6 +727,7 @@ async def get_dimension_images(sid, data):
     # Check if augmentation is active
     aug_active = False
     if aug_params:
+        # Check if any augmentation parameter is set
         aug_active = any(
             (k in ['horizontal_flip', 'vertical_flip'] and v) or 
             (k not in ['horizontal_flip', 'vertical_flip'] and v != 0)
@@ -733,6 +786,8 @@ async def get_dimension_images(sid, data):
                 cell_idx += 1
             
             # Generate 5 augmented variations
+            # This loop relies on the randomness inside apply_augmentation being stateful (i.e., changing on each call)
+            # The seed is effectively controlled by the default random state for each Sequential call.
             for var_idx in range(5):
                 augmented = apply_augmentation(processed, aug_params)
                 success, buffer = cv2.imencode('.png', augmented)

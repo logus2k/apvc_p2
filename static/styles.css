@@ -216,7 +216,7 @@ button.warning:hover {
     display: flex !important;
     justify-content: space-between;
     background: #c7e5ee;
-    padding: 10px;
+    padding: 5px;
     margin: 5px;
     border-radius: 4px;
     font-size: 13px;
@@ -230,8 +230,9 @@ button.warning:hover {
 }
 
 .pagination-controls button {
-    padding: 8px 12px;
+    padding: 6px 10px;
     font-size: 13px;
+    height: 30px;
 }
 
 .pagination-controls span {
@@ -302,7 +303,7 @@ button.warning:hover {
 }
 
 .image-cell.augmented {
-    border: 2px solid #ff9933 !important;
+    border: 1px solid #ff9933 !important;
 }
 
 .image-cell .status-label {
@@ -319,11 +320,10 @@ button.warning:hover {
 }
 
 .image-cell.augmented .status-label {
-    background: rgba(255, 153, 51, 0.95);
-    color: white;
+    background: #ffbc79;
+    color: #212121;
     align-items: center;
 }
-
 .du-slider-label {
     font-size: 13px;
     font-weight: 500;
