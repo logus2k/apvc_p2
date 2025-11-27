@@ -319,7 +319,7 @@ button.warning:hover {
 }
 
 .image-cell.augmented .status-label {
-    background: rgba(255, 153, 51, 0.9);
+    background: rgba(255, 153, 51, 0.95);
     color: white;
     align-items: center;
 }
