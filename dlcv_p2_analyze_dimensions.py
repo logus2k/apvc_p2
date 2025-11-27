@@ -20,12 +20,16 @@ class DimensionAnalyzer:
         
         Args:
             tolerance_percent: Percentage tolerance for binning (default: 5.0%)
+                              Use 0 to create a single bin with all images.
         """
         self.tolerance_percent = tolerance_percent
         self.dimensions = []
         self.bins = []
         # Include tolerance in filename
-        tolerance_str = str(int(tolerance_percent)) if tolerance_percent == int(tolerance_percent) else str(tolerance_percent).replace('.', '_')
+        if tolerance_percent == 0:
+            tolerance_str = "all"
+        else:
+            tolerance_str = str(int(tolerance_percent)) if tolerance_percent == int(tolerance_percent) else str(tolerance_percent).replace('.', '_')
         self.json_output_path = f"static/dlcv_p2_dataset_dimensions_{tolerance_str}.json"
     
     def scan_all_dimensions(self):
@@ -61,11 +65,18 @@ class DimensionAnalyzer:
         """
         Create bins with configured tolerance.
         
+        Special case: If tolerance_percent is 0, create a single bin containing all images.
+        
         Strategy: Group dimensions where both width and height are within 
         tolerance_percent of each other.
         """
         print("\n" + "=" * 70)
-        print(f"CREATING BINS WITH {self.tolerance_percent}% VARIATION")
+        
+        if self.tolerance_percent == 0:
+            print("CREATING SINGLE BIN WITH ALL IMAGES (tolerance=0)")
+        else:
+            print(f"CREATING BINS WITH {self.tolerance_percent}% VARIATION")
+        
         print("=" * 70)
         
         if not self.dimensions:
@@ -78,6 +89,17 @@ class DimensionAnalyzer:
         
         print(f"\nWidth range: {widths.min()} - {widths.max()} (mean: {widths.mean():.0f})")
         print(f"Height range: {heights.min()} - {heights.max()} (mean: {heights.mean():.0f})")
+        
+        # Special case: tolerance=0 means all images in one bin
+        if self.tolerance_percent == 0:
+            self.bins = [{
+                'center': (int(widths.mean()), int(heights.mean())),
+                'count': len(self.dimensions),
+                'dimensions': self.dimensions.copy(),
+                'indices': list(range(len(self.dimensions)))
+            }]
+            print(f"\nCreated 1 bin containing all {len(self.dimensions)} images")
+            return self.bins
         
         # Create bins using k-means-like clustering with tolerance
         self.bins = []

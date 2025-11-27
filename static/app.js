@@ -483,7 +483,7 @@ function createDUSliders() {
 
         const valueDisplay = document.createElement("div");
         valueDisplay.style.fontSize = "11px";
-        valueDisplay.style.color = "#666";
+        valueDisplay.style.color = "#333";
         valueDisplay.style.marginTop = "4px";
         valueDisplay.style.textAlign = "center";
         valueDisplay.textContent = `${config.min.toFixed(config.precision)} - ${config.max.toFixed(config.precision)}`;

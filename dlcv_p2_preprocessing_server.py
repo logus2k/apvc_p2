@@ -53,7 +53,8 @@ def get_default_config_path():
     """Get the first available JSON config file in static folder"""
     static_dir = "static"
     if os.path.exists(static_dir):
-        json_files = sorted([f for f in os.listdir(static_dir) if f.endswith('.json')])
+        json_files = sorted([f for f in os.listdir(static_dir) 
+                           if f.endswith('.json') and f != 'du_metrics.json'])
         if json_files:
             return os.path.join(static_dir, json_files[0])
     return None
@@ -405,7 +406,8 @@ async def get_available_configs(sid):
     try:
         static_dir = "static"
         if os.path.exists(static_dir):
-            files = [f for f in os.listdir(static_dir) if f.endswith('.json')]
+            files = [f for f in os.listdir(static_dir) 
+                    if f.endswith('.json') and f != 'du_metrics.json']
             files.sort()
             await sio.emit('available_configs', files, room=sid)
         else:
