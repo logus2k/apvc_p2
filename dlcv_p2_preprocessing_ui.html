@@ -21,16 +21,12 @@
                 <div class="control-group"><label for="dataset">Dataset</label><select id="dataset" onchange="loadImages()"><option value="train">TRAIN</option><option value="test">TEST</option></select></div>
                 <div class="control-group"><label for="class-filter">Class Filter</label><select id="class-filter" onchange="loadImagesPage()"><option value="all">All</option><option value="NORMAL">NORMAL</option><option value="PNEUMONIA">PNEUMONIA</option></select></div>
                 <div class="control-group"><label for="dimension">Dimension</label><select id="dimension" onchange="onDimensionChange()"></select></div>
-            </div>
-
-            <div class="control-row">
 
                 <div class="control-group"><label for="h_crop">H-Crop (pixels)</label><input type="number" id="h_crop" min="0" step="1" value="0" onchange="loadImagesPage()"></div>
                 <div class="control-group"><label for="v_crop">V-Crop (pixels)</label><input type="number" id="v_crop" min="0" step="1" value="0" onchange="loadImagesPage()"></div>
                 <div class="control-group"><label for="clahe">CLAHE (clip limit)</label><input type="number" id="clahe" min="0" max="10" step="0.1" value="0" onchange="loadImagesPage()"></div>
                 <div class="control-group"><label for="zoom_in">Zoom In (factor)</label><input type="number" id="zoom_in" min="0" max="2" step="0.05" value="0" onchange="loadImagesPage()"></div>
                 <div class="control-group"><label>&nbsp;</label><button class="success" onclick="saveToConfig()">Save</button></div>
-
             </div>
 
             <div class="control-row">
