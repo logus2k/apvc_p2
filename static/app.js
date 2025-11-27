@@ -713,7 +713,6 @@ function createAugmentationSliders() {
         const container = document.createElement("div");
         container.className = "aug-slider-container";
         container.style.width = "160px";
-        // container.style.marginBottom = "15px";
 
         const label = document.createElement("div");
         label.className = "du-slider-label";
@@ -773,7 +772,7 @@ function createAugmentationSliders() {
     flipContainer.style.flexDirection = "row";
     flipContainer.style.gap = "20px";
     flipContainer.style.alignItems = "center";
-    flipContainer.style.marginTop = "5px";
+    flipContainer.style.marginTop = "15px";
 
     // Horizontal flip
     const hFlipDiv = document.createElement("div");
