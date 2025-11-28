@@ -259,7 +259,7 @@ button.warning:hover {
     padding: 10px 10px 0px 10px;
     display: flex;
     flex-wrap: wrap;
-    gap: 45px;
+    gap: 15px;
     align-items: flex-start;
     border-top: 0.5px solid #bdc3c7;
     width: 100%;

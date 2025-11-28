@@ -36,7 +36,12 @@ METRIC_LABELS = {
     'skewness': 'Skewness',
     'local_std_mean': 'Local Std Mean',
     'local_std_var': 'Local Std Variance',
-    'high_freq_energy': 'High Freq Energy'
+    'high_freq_energy': 'High Freq Energy',
+    'centering_offset_x': 'Horizontal Centering Offset',
+    'centering_offset_y': 'Vertical Centering Offset',
+    'content_width_ratio': 'Content Width Ratio',
+    'content_height_ratio': 'Content Height Ratio',
+    'aspect_ratio': 'Aspect Ratio'
 }
 
 # Metrics to include in range calculations

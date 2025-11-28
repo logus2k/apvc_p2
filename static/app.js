@@ -546,6 +546,7 @@ function createDUSliders() {
         const container = document.createElement("div");
         container.className = "du-slider-container";
         container.style.width = "160px";
+        container.style.marginRight = "10px";
 
         const label = document.createElement("div");
         label.className = "du-slider-label";
