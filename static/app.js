@@ -450,7 +450,7 @@ function displayImage(i, d, filename, du = {}, is_augmented = false) {
     // Attach DU metrics to DOM element for later use
     c.dataset.du = JSON.stringify(du);
 
-    document.getElementById('loading').style.display = 'none';
+    // document.getElementById('loading').style.display = 'none';
 }
 
 function saveToConfig() {
@@ -605,12 +605,22 @@ function createDUSliders() {
             }
         }
 
-        // Handle slider changes
+        // Handle slider updates (visual feedback while dragging)
+        sliderDiv.noUiSlider.on('update', (values) => {
+            const minVal = parseFloat(values[0]);
+            const maxVal = parseFloat(values[1]);
+            
+            // Update valueDisplay immediately (no count yet)
+            valueDisplay.textContent = `${minVal.toFixed(config.precision)} - ${maxVal.toFixed(config.precision)}`;
+        });
+
+        // Handle slider changes (when released - apply filter)
         sliderDiv.noUiSlider.on('change', (values) => {
             const minVal = parseFloat(values[0]);
             const maxVal = parseFloat(values[1]);
             
-            valueDisplay.textContent = `${minVal.toFixed(config.precision)} - ${maxVal.toFixed(config.precision)} (...)`;            
+            // Show calculating indicator
+            valueDisplay.textContent = `${minVal.toFixed(config.precision)} - ${maxVal.toFixed(config.precision)} (...)`;
 
             // Request count from server
             const configFile = document.getElementById('config-file').value;
@@ -629,7 +639,6 @@ function createDUSliders() {
 
             // Update filters
             if (minVal === config.min && maxVal === config.max) {
-                // Reset to full range - remove filter
                 delete duFilters[metricKey];
             } else {
                 duFilters[metricKey] = [minVal, maxVal];
@@ -757,7 +766,13 @@ function createAugmentationSliders() {
             }
         });
 
-        // Handle slider changes
+        // Visual feedback while dragging
+        sliderDiv.noUiSlider.on('update', (values) => {
+            const val = parseFloat(values[0]);
+            valueDisplay.textContent = val.toFixed(config.precision);
+        });
+
+        // Apply changes when released
         sliderDiv.noUiSlider.on('change', (values) => {
             const val = parseFloat(values[0]);
             valueDisplay.textContent = val.toFixed(config.precision);
