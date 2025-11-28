@@ -118,46 +118,6 @@ socket.on('image_data', (d) => {
 socket.on('error', (d) => showStatus(`Error: ${d.message}`, true));
 
 
-const duTooltip = document.getElementById("du-tooltip");
-
-// Listen for hover on image cells
-document.addEventListener("mousemove", (event) => {
-    const cell = event.target.closest(".image-cell");
-
-    if (!cell || !cell.dataset.du) {
-        duTooltip.style.display = "none";
-        return;
-    }
-
-    // Parse DU metrics
-    let metrics = {};
-    try {
-        metrics = JSON.parse(cell.dataset.du);
-    } catch (e) {
-        duTooltip.style.display = "none";
-        return;
-    }
-
-    // Build tooltip text (compact formatting)
-    let text = "";
-    for (const [key, value] of Object.entries(metrics)) {
-        text += `${key}: ${value}\n`;
-    }
-
-    duTooltip.textContent = text.trim();
-    duTooltip.style.display = "block";
-
-    // Position tooltip near cursor
-    duTooltip.style.left = event.pageX + 15 + "px";
-    duTooltip.style.top = event.pageY + 15 + "px";
-});
-
-// Hide tooltip on mouse leave
-document.addEventListener("mouseleave", () => {
-    duTooltip.style.display = "none";
-});
-
-
 function showStatus(m, e = false) { const s = document.getElementById('status'); s.textContent = m; s.className = 'status' + (e ? ' error' : ''); s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 3000); }
 
 function loadAvailableConfigs() {
@@ -410,7 +370,7 @@ function loadImagesPage() {
         limit: IMAGES_PER_PAGE
     });
     
-    document.getElementById('loading').style.display = 'block';
+    // document.getElementById('loading').style.display = 'block';
 }
 
 function getCurrentParams() { return { h_crop: parseFloat(document.getElementById('h_crop').value) || 0, v_crop: parseFloat(document.getElementById('v_crop').value) || 0, clahe: parseFloat(document.getElementById('clahe').value) || 0, zoom_in: parseFloat(document.getElementById('zoom_in').value) || 0 }; }
@@ -444,6 +404,12 @@ function displayImage(i, d, filename, du = {}, is_augmented = false) {
             img.src = url;
         } else {
             imageWrapper.innerHTML = `<img src="${url}">`;
+            img = imageWrapper.querySelector('img'); // Get the newly created img element
+        }
+        
+        // Add double-click handler to open modal (only if img exists)
+        if (img) {
+            img.ondblclick = () => openImageModal(url, filename, du);
         }
     }
 
@@ -645,7 +611,7 @@ function createDUSliders() {
     resetDUButton.textContent = "Reset";
     resetDUButton.style.padding = "6px 12px";
     resetDUButton.style.fontSize = "13px";
-    resetDUButton.style.marginTop = "20px";
+    resetDUButton.style.marginTop = "15px";
     resetDUButton.onclick = () => {
         // Reset all DU sliders to full range
         Object.entries(metricRanges).forEach(([metricKey, config]) => {
@@ -804,7 +770,7 @@ function createAugmentationSliders() {
     // Reset button for augmentation
     const resetAugButton = document.createElement("button");
     resetAugButton.textContent = "Reset";
-    resetAugButton.style.marginLeft = "20px";
+    resetAugButton.style.marginLeft = "15px";
     resetAugButton.style.padding = "6px 12px";
     resetAugButton.style.fontSize = "13px";
     resetAugButton.onclick = () => {
@@ -849,6 +815,69 @@ function createAugmentationSliders() {
         loadImagesPage();
     });
 }
+
+// Image Modal Functions
+function openImageModal(imageUrl, filename, metrics) {
+    const modal = document.getElementById('image-modal');
+    const modalImage = document.getElementById('modal-image');
+    const modalFilename = document.getElementById('modal-filename');
+    const modalMetrics = document.getElementById('modal-metrics');
+    
+    // Set image
+    modalImage.src = imageUrl;
+    
+    // Set filename (basename only)
+    modalFilename.textContent = filename;
+    
+    // Build metrics HTML
+    const metricLabels = {
+        'global_std': 'Global Contrast',
+        'dynamic_range': 'Dynamic Range',
+        'hist_entropy': 'Histogram Entropy',
+        'kurtosis': 'Kurtosis',
+        'skewness': 'Skewness',
+        'local_std_mean': 'Local Std Mean',
+        'local_std_var': 'Local Std Variance',
+        'high_freq_energy': 'High Freq Energy',
+        'centering_offset_x': 'Horizontal Offset',
+        'centering_offset_y': 'Vertical Offset',
+        'content_width_ratio': 'Content Width Ratio',
+        'content_height_ratio': 'Content Height Ratio',
+        'aspect_ratio': 'Aspect Ratio'
+    };
+    
+    let html = '<div class="metric-group">';
+    html += '<div class="metric-group-title">Data Quality Metrics</div>';
+    
+    for (const [key, value] of Object.entries(metrics)) {
+        const label = metricLabels[key] || key;
+        const formattedValue = typeof value === 'number' ? value.toFixed(3) : value;
+        html += `<div class="metric-item">
+                    <span class="metric-label">${label}</span>
+                    <span class="metric-value">${formattedValue}</span>
+                 </div>`;
+    }
+    
+    html += '</div>';
+    modalMetrics.innerHTML = html;
+    
+    // Show modal
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto'; // Restore scrolling
+}
+
+// Close modal with Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeImageModal();
+    }
+});
 
 // Config loaded automatically on connect
 window.onload = () => { };

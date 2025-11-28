@@ -60,7 +60,20 @@
 
     </div>
 
-    <div id="du-tooltip" class="du-tooltip" style="display:none;"></div>    
+    <div id="image-modal" class="image-modal" style="display:none;" ondblclick="closeImageModal()">
+        <div class="image-modal-content" onclick="event.stopPropagation()">
+            <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
+            <div class="image-modal-body">
+                <div class="image-modal-left">
+                    <img id="modal-image" src="" alt="X-ray Image">
+                </div>
+                <div class="image-modal-right">
+                    <h3 id="modal-filename">Filename</h3>
+                    <div id="modal-metrics"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script type="text/javascript" src="/cxray/static/app.js"></script>
 
