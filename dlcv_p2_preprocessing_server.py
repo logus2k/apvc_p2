@@ -128,7 +128,8 @@ def compute_metric_ranges(image_paths: List[str], dataset: str) -> Dict:
                 'outlier_low': float,  # Q1 - 1.5*IQR
                 'outlier_high': float, # Q3 + 1.5*IQR
                 'label': str,
-                'precision': int
+                'precision': int,
+                'total_count': int     # Number of images with this metric
             }
         }
     """
@@ -160,7 +161,8 @@ def compute_metric_ranges(image_paths: List[str], dataset: str) -> Dict:
                 'outlier_low': 0.0,
                 'outlier_high': 1.0,
                 'label': METRIC_LABELS[key],
-                'precision': 2
+                'precision': 2,
+                'total_count': 0
             }
             continue
         
@@ -194,7 +196,8 @@ def compute_metric_ranges(image_paths: List[str], dataset: str) -> Dict:
             'outlier_low': round(outlier_low, precision),
             'outlier_high': round(outlier_high, precision),
             'label': METRIC_LABELS[key],
-            'precision': precision
+            'precision': precision,
+            'total_count': len(values)
         }
     
     return ranges
@@ -423,10 +426,9 @@ def apply_augmentation(image: np.ndarray, aug_params: dict) -> np.ndarray:
     # Check if any augmentation is active
     if not AUGMENTATION_AVAILABLE:
         return image
-        
-    if not aug_params or all(v == 0 or v is False for k, v in aug_params.items() if k != 'gaussian_noise' or v == 0):
-        if aug_params.get('gaussian_noise', 0) == 0:
-            return image
+    
+    if not aug_params:
+        return image
     
     # --- 1. Parameter Extraction ---
     rotation = float(aug_params.get('rotation', 0))
@@ -438,6 +440,12 @@ def apply_augmentation(image: np.ndarray, aug_params: dict) -> np.ndarray:
     horizontal_flip = bool(aug_params.get('horizontal_flip', False))
     vertical_flip = bool(aug_params.get('vertical_flip', False))
     gaussian_noise = float(aug_params.get('gaussian_noise', 0))
+    
+    # Check if any augmentation parameter is actually set
+    if (rotation == 0 and brightness_var == 0 and zoom == 0 and 
+        width_shift == 0 and height_shift == 0 and contrast_var == 0 and 
+        not horizontal_flip and not vertical_flip and gaussian_noise == 0):
+        return image
 
     # --- 2. Input/Output Setup ---
     # Convert image (H, W) to Tensor (1, H, W, 1) and change dtype to float32
@@ -615,6 +623,70 @@ async def get_metric_ranges(sid, data):
         'dimension': dimension,
         'dataset': dataset,
         'ranges': ranges
+    }, room=sid)
+
+@sio.event
+async def get_metric_count(sid, data):
+    """
+    Count images that pass a specific metric filter.
+    
+    Args:
+        data: dict with 'config_file', 'dimension', 'dataset', 'class_filter', 
+              'metric_key', 'min_val', 'max_val'
+    
+    Returns:
+        Emits 'metric_count' with count
+    """
+    config_file = data.get('config_file')
+    dimension = data.get('dimension')
+    dataset = data.get('dataset', 'train')
+    class_filter = data.get('class_filter', 'all')
+    metric_key = data.get('metric_key')
+    min_val = float(data.get('min_val'))
+    max_val = float(data.get('max_val'))
+    
+    if not all([config_file, dimension, metric_key is not None]):
+        await sio.emit('metric_count', {'count': 0, 'metric_key': metric_key}, room=sid)
+        return
+    
+    # Load config
+    config_path = os.path.join("static", config_file)
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except Exception:
+        await sio.emit('metric_count', {'count': 0, 'metric_key': metric_key}, room=sid)
+        return
+    
+    if 'dimensions' not in config or dimension not in config['dimensions']:
+        await sio.emit('metric_count', {'count': 0, 'metric_key': metric_key}, room=sid)
+        return
+    
+    dimension_config = config['dimensions'][dimension]
+    all_image_paths = dimension_config.get('image_paths', [])
+    
+    # Filter by dataset
+    dataset_dir = 'chest_xray/train' if dataset == 'train' else 'chest_xray/test'
+    all_image_paths = [p for p in all_image_paths if dataset_dir in p]
+    
+    # Filter by class
+    if class_filter != 'all':
+        all_image_paths = [p for p in all_image_paths if f'/{class_filter}/' in p]
+    
+    # Count images within metric range
+    count = 0
+    for path in all_image_paths:
+        normalized_path = path.replace("\\", "/")
+        du_data = DU_LOOKUP.get(normalized_path, {})
+        
+        if metric_key in du_data:
+            metric_val = float(du_data[metric_key])
+            if min_val <= metric_val <= max_val:
+                count += 1
+    
+    await sio.emit('metric_count', {
+        'count': count,
+        'metric_key': metric_key
     }, room=sid)
 
 

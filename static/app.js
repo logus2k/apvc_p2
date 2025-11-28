@@ -115,6 +115,24 @@ socket.on('image_data', (d) => {
     }
 });
 
+socket.on('metric_count', (data) => {
+    const { count, metric_key } = data;
+    const valueDisplay = document.getElementById(`value-display-${metric_key}`);
+    
+    if (valueDisplay && metricRanges[metric_key]) {
+        const config = metricRanges[metric_key];
+        const filter = duFilters[metric_key];
+        
+        if (filter) {
+            const [minVal, maxVal] = filter;
+            valueDisplay.textContent = `${minVal.toFixed(config.precision)} - ${maxVal.toFixed(config.precision)} (${count})`;
+        } else {
+            // Full range
+            valueDisplay.textContent = `${config.min.toFixed(config.precision)} - ${config.max.toFixed(config.precision)} (${count})`;
+        }
+    }
+});
+
 socket.on('error', (d) => showStatus(`Error: ${d.message}`, true));
 
 
@@ -516,6 +534,7 @@ function createDUSliders() {
 
         const label = document.createElement("div");
         label.className = "du-slider-label";
+        label.id = `label-${metricKey}`;
         label.textContent = config.label;
         label.style.marginBottom = "8px";
 
@@ -524,11 +543,12 @@ function createDUSliders() {
         sliderDiv.id = `slider-${metricKey}`;
 
         const valueDisplay = document.createElement("div");
+        valueDisplay.id = `value-display-${metricKey}`;
         valueDisplay.style.fontSize = "11px";
         valueDisplay.style.color = "#333";
         valueDisplay.style.marginTop = "6px";
         valueDisplay.style.textAlign = "center";
-        valueDisplay.textContent = `${config.min.toFixed(config.precision)} - ${config.max.toFixed(config.precision)}`;
+        valueDisplay.textContent = `${config.min.toFixed(config.precision)} - ${config.max.toFixed(config.precision)} (${config.total_count || 0})`;
 
         container.appendChild(label);
         container.appendChild(sliderDiv);
@@ -590,7 +610,22 @@ function createDUSliders() {
             const minVal = parseFloat(values[0]);
             const maxVal = parseFloat(values[1]);
             
-            valueDisplay.textContent = `${minVal.toFixed(config.precision)} - ${maxVal.toFixed(config.precision)}`;
+            valueDisplay.textContent = `${minVal.toFixed(config.precision)} - ${maxVal.toFixed(config.precision)} (...)`;            
+
+            // Request count from server
+            const configFile = document.getElementById('config-file').value;
+            const dataset = document.getElementById('dataset').value;
+            const classFilter = document.getElementById('class-filter').value;
+            
+            socket.emit('get_metric_count', {
+                config_file: configFile,
+                dimension: currentDimension,
+                dataset: dataset,
+                class_filter: classFilter,
+                metric_key: metricKey,
+                min_val: minVal,
+                max_val: maxVal
+            });
 
             // Update filters
             if (minVal === config.min && maxVal === config.max) {
@@ -618,6 +653,12 @@ function createDUSliders() {
             const sliderDiv = document.getElementById(`slider-${metricKey}`);
             if (sliderDiv && sliderDiv.noUiSlider) {
                 sliderDiv.noUiSlider.set([config.min, config.max]);
+            }
+            
+            // Reset valueDisplay to show total count
+            const valueDisplay = document.getElementById(`value-display-${metricKey}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${config.min.toFixed(config.precision)} - ${config.max.toFixed(config.precision)} (${config.total_count || 0})`;
             }
         });
         
@@ -671,8 +712,8 @@ function createAugmentationSliders() {
         { key: 'zoom', label: 'Zoom Variation', min: 0, max: 0.2, step: 0.01, precision: 2 },
         { key: 'width_shift', label: 'Width Shift', min: 0, max: 0.2, step: 0.01, precision: 2 },
         { key: 'height_shift', label: 'Height Shift', min: 0, max: 0.2, step: 0.01, precision: 2 },
-        { key: 'contrast_var', label: 'Contrast Variation', min: 0, max: 0.3, step: 0.01, precision: 2 },
-        { key: 'gaussian_noise', label: 'Gaussian Noise', min: 0, max: 0.05, step: 0.001, precision: 3 }
+        { key: 'contrast_var', label: 'Contrast Variation', min: 0, max: 0.5, step: 0.01, precision: 2 },
+        { key: 'gaussian_noise', label: 'Gaussian Noise', min: 0, max: 0.1, step: 0.001, precision: 3 }
     ];    
 
     // Create sliders
