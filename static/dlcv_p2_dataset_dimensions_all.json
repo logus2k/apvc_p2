@@ -1,6 +1,6 @@
 {
   "global_settings": {
-    "allowed_variation": 0.0,
+    "allowed_variation": 0,
     "h_crop": true,
     "v_crop": true,
     "clahe": true,
@@ -5872,10 +5872,21 @@
         "./chest_xray/train/PNEUMONIA/person9_bacteria_40.jpeg",
         "./chest_xray/train/PNEUMONIA/person9_bacteria_41.jpeg"
       ],
-      "h_crop": 0,
-      "v_crop": 0,
+      "h_crop": 200,
+      "v_crop": 100,
       "clahe": 0,
-      "zoom_in": 0
+      "zoom_in": 1,
+      "augmentation": {
+        "rotation": 0,
+        "brightness_var": 0,
+        "zoom": 0,
+        "width_shift": 0,
+        "height_shift": 0,
+        "contrast_var": 0,
+        "gaussian_noise": 0,
+        "horizontal_flip": false,
+        "vertical_flip": false
+      }
     }
   }
 }
