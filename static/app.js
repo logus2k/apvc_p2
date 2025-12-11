@@ -427,7 +427,7 @@ function displayImage(i, d, filename, du = {}, is_augmented = false) {
         
         // Add double-click handler to open modal (only if img exists)
         if (img) {
-            img.ondblclick = () => openImageModal(url, filename, du);
+            img.onclick = () => openImageModal(url, filename, du);
         }
     }
 
