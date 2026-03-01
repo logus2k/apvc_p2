@@ -1,0 +1,41 @@
+# Python virtual environment
+bin/
+lib/
+lib64
+include/
+share/
+pyvenv.cfg
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter notebooks (not needed by server)
+*.ipynb
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Large data directories (mounted as volumes instead)
+chest_xray/
+p1_final/
+checkpoints/
+results/
+documents/
+RC/
+
+# Root-level model checkpoints (not used by server)
+best_model_checkpoint.keras
+best_model_checkpoint_stage1.keras
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore

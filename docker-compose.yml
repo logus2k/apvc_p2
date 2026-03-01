@@ -1,0 +1,9 @@
+services:
+  preprocessing-server:
+    build: .
+    container_name: cxray-preprocessing
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chest_xray:/app/chest_xray:ro
+    restart: unless-stopped
